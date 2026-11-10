@@ -100,10 +100,21 @@ node dragging (panel-control semantics) — the value changes are simulator
 interactions, not graph edits. The property dock is refreshed after each
 transition (via the same `onParamEdited` path used by every editor).
 
+**Press area (inset):** the table may declare, as an ADDITIVE trailing field
+(`NsActTable::inset`, world px, read only when `struct_size >=
+sizeof(NsActTable)` — older plugins read as 0), the margin that stays FREE
+around the press face:
+
+- clicks inside the face run the act as described above;
+- clicks in the margin follow the standard node behavior (select/drag);
+- the plugin then draws ONLY the face (see `nsui::Pushdown::draw`),
+  honoring the same inset, so what you see is where you click.
+
 ```cpp
-// pushdown: params[0] ("pulsa") *behaves as* the visible button face
-static const NsAct kArquivos[] = {{"push", NS_ACT_HOLD, 0}};
-NS_PLUGIN_ACTS(kArquivos, 1);
+// pushdown: params[0] ("pulsa") *behaves as* the visible button face; the
+// button draws only its face (inset 10), leaving the margin draggable
+static const NsAct kActsBotao[] = {{"push", NS_ACT_HOLD, 0}};
+NS_PLUGIN_ACTS_IN(kActsBotao, 1, Botao::kPressInset);  // inset=10
 ```
 
 ## C++ base for control plugins (herança, header-only)
@@ -161,7 +172,9 @@ The base also ships two ready-made controls:
 
 ## The built-in "controls" library
 
-`plugins/controles.so` — `push`, `entrada01` (editable [0;1] as a *value*)
-and `saida01` (sink with a plugin-drawn display `[0;1]` used with an
-`edge`-connected wire). `examples/controles.nodesim` exercises the three of
-them (button → gain → display).
+`plugins/controles.so` — the `push` type only (the pushdown button; face
+inset so the margin stays draggable). `examples/controles.nodesim` ships a
+single button ready to press. The former built-ins `entrada01`/`saida01`
+were removed on purpose (2026-11): the *pattern* stays documented above, so
+third parties recreate them by inheritance exactly as described — we
+kept the library lean instead of accumulating demo nodes.

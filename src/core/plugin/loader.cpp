@@ -651,7 +651,10 @@ int loadActs(PluginRegistry& pm, size_t libIndex) {
                                         std::to_string(a.param) + " of '" + id + "'");
             continue;
         }
-        t->acts.push_back({a.kind, a.param});
+        const int inset = table->struct_size >= (int)sizeof(NsActTable)
+                              ? table->inset
+                              : 0; // old tables: no margin behavior
+        t->acts.push_back({a.kind, a.param, inset});
         ++applied;
     }
     return applied;

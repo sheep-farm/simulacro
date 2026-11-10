@@ -60,7 +60,7 @@ struct PluginRegistry {
         };
         std::vector<UiItem> ui;           // per-type layout (ordered)
         // Additive ABI 14 extension: canvas click actions (nodesim_plugin_acts)
-        struct ActDecl { int kind = NS_ACT_HOLD; int param = 0; };
+        struct ActDecl { int kind = NS_ACT_HOLD; int param = 0; int inset = 0; };
         std::vector<ActDecl> acts;
     };
     struct Lib {

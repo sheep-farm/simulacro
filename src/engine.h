@@ -84,7 +84,7 @@ struct Engine {
     // Canvas-click do plugin (additive ABI 14): devolve o ato declarado pelo
     // tipo (kind + params[] index) ou {}. `kind` NS_ACT_HOLD (aperta/solta) ou
     // NS_ACT_TOGGLE (cada clique alterna). Registrado por NS_PLUGIN_ACTS.
-    struct ClickAct { int kind = 0; int param = -1; };
+    struct ClickAct { int kind = 0; int param = -1; int inset = 0; };
     ClickAct clickAct(const Node& n) const;
     // Executa a transição do ato (usado pelo canvas em cliques):
     //   HOLD: value=1 na pressão, 0 na soltura; TOGGLE: vira !value.

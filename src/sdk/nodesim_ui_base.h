@@ -308,13 +308,15 @@ NsNodeType makeType() {
 
 
 // ---- Pushdown base (herança para "botões" de painel) ----
-// Um controle de painel cuja SAÍDA publica [0;1] e cujo corpo É o botão:
+// Um controle de painel cuja SAÍDA publica [0;1] e cuja FACE é o botão:
 //   - estado interno `pressed_` ligado ao params[0] (BOOL, nome `pulsa`);
 //   - paramGet/paramSet automáticos + blob automático (via Control);
 //   - `step()` devolve 1.0 enquanto pressionado, 0.0 solto;
 //   - hooks virtuais onPressed()/onReleased() (chamados em transição);
-//   - kCustomShape=true: o corpo É o botão (autorender por draw()); a
-//     subclasse pode sobrescrever draw()/defColor()/kLabel/kMomentary;
+//   - kCustomShape=true: o corpo é autorender por draw(), MAS apenas a FACE
+//     ocupa o desenho: a borda do box fica com kPressInset px de margem
+//     neutra, permitindo SELECIONAR/ARRASTAR o nó pela margem (o host
+//     honra o inset declarado pela tabela NS_PLUGIN_ACTS_IN);
 //   - kMomentary=true casa com NS_ACT_HOLD; kMomentary=false casa com
 //     NS_ACT_TOGGLE (mantém 1 após soltar).
 // Terceiros derivam; ambos os contratos (acts + design) ficam na subclasse.
@@ -348,36 +350,34 @@ struct Pushdown : Control {
     virtual void onPressed() {}
     virtual void onReleased() {}
 
-    // ---- design default (kCustomShape=true => draw() autorende o corpo) ----
+    // ---- design default (kCustomShape=true => draw() autorende a FACE) ----
     void draw(const NsDraw* g, const NsRect* area) override {
         if (!g || !area) return;
-        const int x = area->x, y = area->y;
-        const int w = area->w, h = area->h;
+        // a FACE é o box interno à margem: o resto do box fica livre p/ arrastar
+        const int m = kPressInset;
+        const int x = area->x + m, y = area->y + m;
+        const int w = area->w - 2 * m, h = area->h - 2 * m;
+        if (w <= 4 || h <= 4) return;
         int rgb[3] = {120, 235, 180};
         defColor(rgb);
         const unsigned ring = ((unsigned)rgb[0] << 16) | ((unsigned)rgb[1] << 8) |
                               (unsigned)rgb[2] | 0xFF000000u;
         if (!g->rect) return;
-        const int b = std::max(3, std::min(w, h) / 10);
-        // corpo escuro (fundo) + moldura do pushdown
-        g->rect(g->ctx, x, y, w, h, 0xFF0D0D12u);
         const unsigned face = pressed_
                                   ? ring
                                   : (((ring & 0x00FFFFFFu) >> 1) & 0x00FFFFFFu) |
-                                        0xFF101014u;
-        g->rect(g->ctx, x + b, y + b, w - 2 * b, h - 2 * b, face);
+                                        0xFF14141Au;
+        // moldura da face + corpo da face
+        g->rect(g->ctx, x, y, w, h, ring);
+        g->rect(g->ctx, x + 1, y + 1, w - 2, h - 2, face);
         // bisel: borda interna clara (solto) ou escura (pressionado)
         const unsigned rim = pressed_ ? 0xFF101018u : 0xFF3C3C4Au;
+        const int b = std::max(3, std::min(w, h) / 10);
         g->rect(g->ctx, x, y, w, b, rim);
         g->rect(g->ctx, x, y, b, h, rim);
         // brilho do topo quando solto
         if (!pressed_) g->rect(g->ctx, x + b + 2, y + b + 1, w - 2 * b - 4, 2,
                                0xFF2A2A38u);
-        // frame do plug-in
-        g->rect(g->ctx, x, y, w, 1, ring);
-        g->rect(g->ctx, x, y + h - 1, w, 1, ring);
-        g->rect(g->ctx, x, y, 1, h, ring);
-        g->rect(g->ctx, x + w - 1, y, 1, h, ring);
         // legenda
         const char* cap = "PUSH";
         if (g->text) {
@@ -398,8 +398,9 @@ struct Pushdown : Control {
     static constexpr int kNumOut = 1;
     static constexpr int kDefIn = 1;
     static constexpr int kPrefW = 96;
-    static constexpr int kPrefH = 64;
+    static constexpr int kPrefH = 72;
     static constexpr bool kCustomShape = true;
+    static constexpr int kPressInset = 10; // margem interna à face (world px)
 
    protected:
     Pushdown() = default;

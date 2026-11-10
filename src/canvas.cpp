@@ -1146,7 +1146,19 @@ void GraphCanvas::onLeftDown(wxMouseEvent& ev) {
     if (nidAct >= 0) {
         if (const Node* nA = e_->g.find(nidAct)) {
             const Engine::ClickAct act = e_->clickAct(*nA);
-            if (act.kind == NS_ACT_HOLD) {
+            const FRect nbAct = nodeBox(*nA);
+            const bool face = act.inset > 0
+                                  ? mouseWorld_.x >= nbAct.x + act.inset &&
+                                        mouseWorld_.x <= nbAct.x + nbAct.w - act.inset &&
+                                        mouseWorld_.y >= nbAct.y + act.inset &&
+                                        mouseWorld_.y <= nbAct.y + nbAct.h - act.inset
+                                  : true; // inset 0 (plugins antigos): corpo inteiro
+            if (!face) {
+                // clique na MARGEM: comportamento padrão do nó (selecionar/
+                // arrastar). Não aperta o botão.
+                actNode_ = -1;
+                actParam_ = -1;
+            } else if (act.kind == NS_ACT_HOLD) {
                 actNode_ = nidAct;
                 actParam_ = act.param;
                 e_->runClickAct(*nA, act, true);

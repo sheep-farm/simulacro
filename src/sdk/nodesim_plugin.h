@@ -511,12 +511,26 @@ struct NsActTable {
     int struct_size;   // sizeof(NsActTable); 0 = minimal table
     int num_entries;   // 0..1024
     const NsAct* entries;
+    // Additive trailing field (read by the host ONLY when struct_size >=
+    // sizeof(NsActTable); older plugins read as `inset = 0`):
+    int inset;         // world px of FREE MARGIN around the press face
 };
 
 #define NS_PLUGIN_ACTS(entries_, n_)                                          \
     extern "C" const NsActTable* nodesim_plugin_acts() {                       \
         static const NsActTable ns_acts_ = {                                   \
-            NODESIM_PLUGIN_API, (int)sizeof(NsActTable), (n_), (entries_)};   \
+            NODESIM_PLUGIN_API, (int)sizeof(NsActTable), (n_), (entries_), 0}; \
+        return &ns_acts_;                                                      \
+    }
+
+// Variant with an inner margin: the host routes clicks in the face to the
+// press and keeps the margin free for selecting/dragging the node. The
+// plugin draws ONLY the face (kCustomShape + inset in nsui::Pushdown::draw).
+#define NS_PLUGIN_ACTS_IN(entries_, n_, inset_)                               \
+    extern "C" const NsActTable* nodesim_plugin_acts() {                       \
+        static const NsActTable ns_acts_ = {                                   \
+            NODESIM_PLUGIN_API, (int)sizeof(NsActTable), (n_), (entries_),     \
+            (inset_)};                                                          \
         return &ns_acts_;                                                      \
     }
 

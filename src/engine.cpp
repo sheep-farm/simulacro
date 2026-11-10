@@ -344,6 +344,7 @@ Engine::ClickAct Engine::clickAct(const Node& n) const {
     if (!rt || rt->acts.empty()) return out;
     out.kind = rt->acts.front().kind;
     out.param = rt->acts.front().param;
+    out.inset = rt->acts.front().inset;
     return out;
 }
 
