@@ -36,12 +36,25 @@ static const int kOut = 1;  // portas de saída (1)
 struct Botao : nsui::Pushdown {
     static constexpr const char* kTypeId = "push";
     static constexpr const char* kLabel = "Botão (pushdown)";
-    static void defColor(int rgb[3]) {
+    void defColor(int rgb[3]) const override {
         rgb[0] = 120;
         rgb[1] = 235;
         rgb[2] = 180;
     }
 };
+
+// Widgets declarados (ativos no build com SIMULACRO_NODE_UI; o editor padrão
+// cobre os mesmos campos): switch+led do `pulsa`, e os textos rótulo/cores.
+static const NsUiItem kItensButton[] = {
+    {NS_UI_SWITCH, "", 0, 0, 0, 0, 0},           // pulsa
+    {NS_UI_LED,    "", 0, 0, 0, 0, 0},
+    {NS_UI_VSPACE, nullptr, -1, 0, 0, 0, 0},
+    {NS_UI_TEXT,   "rótulo", 0, 0, 0, 0, 0},
+    {NS_UI_TEXT,   "cor face (hex)", 1, 0, 0, 0, 0},
+    {NS_UI_TEXT,   "cor clique (hex)", 2, 0, 0, 0, 0},
+};
+static const NsUiSpec kSpecsButton[] = {{"push", 6, kItensButton}};
+NS_PLUGIN_UI(kSpecsButton, 1);
 
 // NS_PLUGIN_ACTS_IN: clique na FACE (inset de margem interna), a borda do
 // box fica livre para selecionar/arrastar o nó.

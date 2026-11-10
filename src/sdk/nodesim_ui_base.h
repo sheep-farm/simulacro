@@ -37,8 +37,10 @@ namespace nsui {
 // (shadowing) e implementam o estado (paramGet/paramSet/textGet/textSet e o
 // step). O que não for sobrescrito usa o default abaixo.
 struct Control {
-    // identidade (subclasses conferem/contribuem; usado no design default)
-    static void defColor(int rgb[3]) {
+    // identidade: a subclasse declara os STATICs (kTypeId/kLabel/kParams...)
+    // e AQUI os virtuais presentam o estado ao design/serializer (por causa
+    // do shadowing, um static da subclasse é invisível dentro de Control)
+    virtual void defColor(int rgb[3]) const {
         rgb[0] = 200;
         rgb[1] = 200;
         rgb[2] = 200;
@@ -88,7 +90,34 @@ struct Control {
     // with kSelfOut: the host asks the plugin how many outputs it wants now
 
     // ---- blob automático de estado (params + texts) ----
-    // Formato compatível com os built-ins: "nome=valor" (espaço) e
+    // Formatador de cor: aceita "#RGB", "RGB", "#RRGGBB", "RRGGBB" e 0x (hex),
+// case-insensitive; devolve false quando a string não é uma cor válida.
+inline bool parseHexColor(const char* s, int& r, int& g, int& b) {
+    if (!s) return false;
+    std::string t;
+    for (const char* p = s; *p; ++p) {
+        const char ch = *p;
+        if (ch == ' ' || ch == '\t') continue;
+        t += (char)((ch >= 'A' && ch <= 'Z') ? ch + 32 : ch);
+    }
+    if (t.rfind("0x", 0) == 0) t.erase(0, 2);
+    if (!t.empty() && t[0] == '#') t.erase(0, 1);
+    if (t.size() == 3) {
+        std::string o;
+        for (char c: t) { o += c; o += c; }
+        t = o;
+    }
+    if (t.size() != 6) return false;
+    for (char c : t)
+        if (!std::isxdigit((unsigned char)c)) return false;
+    auto v = [&](int k) { return std::stoul(t.substr(k * 2, 2), nullptr, 16); };
+    r = (int)v(0);
+    g = (int)v(1);
+    b = (int)v(2);
+    return true;
+}
+
+// Formatador de textos no blob: "nome=valor" (espaço) e
     // textos como nome="texto" (escapes de \" e \\).
     virtual std::string saveBlob() const {
         std::string blob;
@@ -265,15 +294,11 @@ namespace control_defaults { }
 template <class C>
 NsNodeType makeType() {
     static_assert(std::is_base_of<Control, C>::value, "derive from nsui::Control");
-    static_assert(!std::is_same<typename std::remove_cv<decltype(C::kTypeId)>::type,
-                                const char* const>::value ||
-                      sizeof(C::kTypeId) > 4,
-                  "kTypeId/kLabel должны ser inicializados na subclasse");
     NsNodeType t{};
     t.id = C::kTypeId;
     t.label = C::kLabel;
     int rgb[3] = {200, 200, 200};
-    C::defColor(rgb);
+    { C cell{}; cell.defColor(rgb); } // resolves via the virtual/table
     t.color[0] = static_cast<float>(rgb[0]);
     t.color[1] = static_cast<float>(rgb[1]);
     t.color[2] = static_cast<float>(rgb[2]);
@@ -322,7 +347,11 @@ NsNodeType makeType() {
 // Terceiros derivam; ambos os contratos (acts + design) ficam na subclasse.
 // Nada no ABI muda: o `.so` segue ABI 14.
 struct Pushdown : Control {
-    bool pressed_ = false;
+    bool pressed_ = false; // botão físico (canvas/property grid)
+    bool inOn_ = false;    // pressão EXTERNA (entrada em nível 1, transiente)
+    std::string caption_ = "";    // rotulo (textos[0]); vazio = "PUSH"
+    std::string faceCol_ = "";    // cor da face solta (hex, textos[1])
+    std::string pressCol_ = "";   // cor da face pressionada (hex, textos[2])
 
     // ---- estado via params[0] (`pulsa`) ----
     double paramGet(int i) const override {
@@ -339,16 +368,51 @@ struct Pushdown : Control {
     int numOut() const override { return 1; } // uma porta [0;1]
     int numParams() const override { return 1; }
     const NsParam* params() const override { return kParams; }
+    int numTexts() const override { return 3; }
+    const char* const* texts() const override { return kTexts; }
+    void defColor(int rgb[3]) const override {
+        rgb[0] = 120;
+        rgb[1] = 235;
+        rgb[2] = 180;
+    }
 
-    // ---- simulação ----
+    // ---- textos editáveis: rotulo ("PUSH"), face/clique (hex) ----
+    const char* textGet(int i) const override {
+        if (i == 0) return caption_.c_str();
+        if (i == 1) return faceCol_.c_str();
+        if (i == 2) return pressCol_.c_str();
+        return "";
+    }
+    void textSet(int i, const char* s) override {
+        if (i == 0)
+            caption_ = s ? s : "";
+        else if (i == 1)
+            faceCol_ = s ? s : "";
+        else if (i == 2)
+            pressCol_ = s ? s : "";
+    }
+
+    // ---- simulação: nível de entrada + botão físico ----
+    // "se a entrada for 1 ele simula um click, ou enquanto for 1 ele está
+    //  como pressionado": a SAÍDA é (pulsa || entrada>0.5) e o design mostra
+    //  a face pressionada nos dois casos (com marcador EXT no 2.)
     double step(const NsContext& c) override {
-        (void)c;
-        return pressed_ ? 1.0 : 0.0;
+        bool ext = false;
+        const int a = c.sockOff[0], q = c.nsock > 0 ? c.sockOff[1] : a;
+        for (int k = a; k < q; ++k)          // somatório do socket 0 (como led)
+            if (c.in[k] != 0.0) ext = true;  // qualquer fio não-zero pressiona
+        const bool was = inOn_;
+        inOn_ = ext;
+        if (inOn_ != was) onExtern(inOn_);
+        return (pressed_ || inOn_) ? 1.0 : 0.0;
     }
 
     // ---- hooks para subclasses ----
     virtual void onPressed() {}
     virtual void onReleased() {}
+    virtual void onExtern(bool on) {
+        (void)on;
+    }
 
     // ---- design default (kCustomShape=true => draw() autorende a FACE) ----
     void draw(const NsDraw* g, const NsRect* area) override {
@@ -358,32 +422,56 @@ struct Pushdown : Control {
         const int x = area->x + m, y = area->y + m;
         const int w = area->w - 2 * m, h = area->h - 2 * m;
         if (w <= 4 || h <= 4) return;
-        int rgb[3] = {120, 235, 180};
-        defColor(rgb);
-        const unsigned ring = ((unsigned)rgb[0] << 16) | ((unsigned)rgb[1] << 8) |
-                              (unsigned)rgb[2] | 0xFF000000u;
+
+        // cores: face/clique vindas dos textos (hex legível) caem sobre as
+        // derivadas de defColor (o fallback mantiene a identidade do plugin)
+        int base[3];
+        defColor(base);
+        int faceRgb[3] = {base[0], base[1], base[2]};
+        int pressRgb[3] = {(base[0] * 3) / 4, (base[1] * 3) / 4, (base[2] * 3) / 4};
+        parseHexColor(faceCol_.empty() ? nullptr : faceCol_.c_str(),
+                      faceRgb[0], faceRgb[1], faceRgb[2]);
+        parseHexColor(pressCol_.empty() ? nullptr : pressCol_.c_str(),
+                      pressRgb[0], pressRgb[1], pressRgb[2]);
+        const bool on = pressed_ || inOn_;
+        // pacote 0xRRGGBBAA (contrato do NsDraw; ver sdk/nodesim_plugin.h)
+        auto pack = [](int r, int g, int b) {
+            return ((unsigned)r << 24) | ((unsigned)g << 16) | ((unsigned)b << 8) | 0xFFu;
+        };
+        const unsigned faceCol = on ? pack(pressRgb[0], pressRgb[1], pressRgb[2])
+                                    : pack(faceRgb[0], faceRgb[1], faceRgb[2]);
         if (!g->rect) return;
-        const unsigned face = pressed_
-                                  ? ring
-                                  : (((ring & 0x00FFFFFFu) >> 1) & 0x00FFFFFFu) |
-                                        0xFF14141Au;
+        const unsigned ring = pack(base[0], base[1], base[2]);
+        { static int n = 0; if (n < 6) {
+              ++n;
+              std::fprintf(stderr, "[push v2] on=%d ext=%d base=(%d,%d,%d) face=(%d,%d,%d)"
+                           " press=(%d,%d,%d) rgb=%08x\n", (int)on, (int)inOn_,
+                           base[0], base[1], base[2], faceRgb[0], faceRgb[1], faceRgb[2],
+                           pressRgb[0], pressRgb[1], pressRgb[2], faceCol);
+          } }
         // moldura da face + corpo da face
         g->rect(g->ctx, x, y, w, h, ring);
-        g->rect(g->ctx, x + 1, y + 1, w - 2, h - 2, face);
+        g->rect(g->ctx, x + 1, y + 1, w - 2, h - 2, faceCol);
         // bisel: borda interna clara (solto) ou escura (pressionado)
-        const unsigned rim = pressed_ ? 0xFF101018u : 0xFF3C3C4Au;
+        const unsigned rim = on ? 0x101018FFu : 0x3C3C4AFFu;
         const int b = std::max(3, std::min(w, h) / 10);
         g->rect(g->ctx, x, y, w, b, rim);
         g->rect(g->ctx, x, y, b, h, rim);
         // brilho do topo quando solto
-        if (!pressed_) g->rect(g->ctx, x + b + 2, y + b + 1, w - 2 * b - 4, 2,
-                               0xFF2A2A38u);
-        // legenda
-        const char* cap = "PUSH";
+        if (!on) g->rect(g->ctx, x + b + 2, y + b + 1, w - 2 * b - 4, 2,
+                         0x2A2A38FFu);
+        // legenda: rotulo do usuário; vazio = r\u00f3tulo do nó; ca\u00e7a-vazio "PUSH"
+        const char* cap = caption_.empty() ? (g->label && *g->label ? g->label
+                                                                    : "PUSH")
+                                           : on ? caption_.c_str()
+                                           : caption_.c_str();
         if (g->text) {
             const int tw = g->textW ? g->textW(g->ctx, cap) : 0;
-            const unsigned tcol = pressed_ ? 0xFF0D0D12u : 0xFFF0F0F8u;
-            g->text(g->ctx, x + (w - tw) / 2, y + h / 2 - 7, cap, tcol);
+            std::string shown = caption_;
+            if (inOn_ && !pressed_) shown += " EXT"; // pressão externa
+            const int tw2 = g->textW ? g->textW(g->ctx, shown.c_str()) : tw;
+            const unsigned tcol = on ? 0x0D0D12FFu : 0xF0F0F8FFu;
+            g->text(g->ctx, x + (w - tw2) / 2, y + h / 2 - 7, shown.c_str(), tcol);
         }
     }
 
@@ -393,6 +481,12 @@ struct Pushdown : Control {
         {"pulsa", 0, 1, 0, NS_PARAM_BOOL, 1, nullptr,
          "pressionado (0/1)", 0, nullptr},
     };
+    static constexpr int kNumTexts = 3;
+    static constexpr const char* kTexts[kNumTexts] = {
+        "rotulo", // legenda da face (vazio = "PUSH")
+        "face",   // hex da face solta   (vazio = cor do plugin)
+        "clique", // hex da face pressionada (vazio = derivado)
+    };
     static constexpr bool kMomentary = true; // NS_ACT_HOLD (casar com a tabela)
     static constexpr bool kSelfOut = true;
     static constexpr int kNumOut = 1;
@@ -400,10 +494,9 @@ struct Pushdown : Control {
     static constexpr int kPrefW = 96;
     static constexpr int kPrefH = 72;
     static constexpr bool kCustomShape = true;
-    static constexpr int kPressInset = 10; // margem interna à face (world px)
+    static constexpr int kPressInset = 10; // margem interna \u00e0 face (world px)
 
    protected:
     Pushdown() = default;
 };
-
 } // namespace nsui

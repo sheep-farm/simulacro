@@ -133,7 +133,9 @@ exports `nodesim_plugin()` (and, optionally, `nodesim_plugin_ui()` and
 struct Botao : nsui::Pushdown {
     static constexpr const char* kTypeId = "push";
     static constexpr const char* kLabel = "Botão (pushdown)";
-    static void defColor(int rgb[3]) { rgb[0] = 120; rgb[1] = 235; rgb[2] = 180; }
+    void defColor(int rgb[3]) const override {   // VIRTUAL na base: 3ª pessoa
+        rgb[0] = 120; rgb[1] = 235; rgb[2] = 180; // sobrescreve; static aqui
+    }                                            // INVISÍVEL dentro da base
 };
 
 // host glue (one NsNodeType per Control subclass)
@@ -154,7 +156,8 @@ overrides the *virtuals*):
 
 | member | meaning |
 | --- | --- |
-| `kTypeId/kLabel/defColor/kDefIn/kPrefW/kPrefH` | static identity of the type |
+| `kTypeId/kLabel/kDefIn/kPrefW/kPrefH` | static identity of the type |
+| `defColor()` (virtual) | identity color; a STATIC do membro não é vista pela base (shadowing) — sobrescreva o virtual |
 | `kParams/kNumParams, kTexts/kNumTexts` | static C-tables; the *host* reads them via the type table |
 | `numParams()/params()/numTexts()/texts()` (virtual) | dynamic access for the *base-led* blob serializer |
 | `paramGet/paramSet, textGet/textSet` | state hooks (user-written) |
@@ -166,7 +169,15 @@ The base also ships two ready-made controls:
 
 - `nsui::Pushdown` — the button family (state, blob, `[0;1]` step, defColor,
   autoloaded authored design `kCustomShape=true`, `NS_ACT_HOLD` match). The
-  built-in `push` type (`plugins/controles.cpp`) derives from it.
+  built-in `push` type (`plugins/controles.cpp`) derives from it. Extras of
+  the family:
+    - editable texts `rotulo` (face caption), `face` (loose face hex), `clique`
+      (pressed face hex) — empty means the plugin identity color (defColor);
+    - INPUT level: while any incoming wire is nonzero, the face renders
+      pressed and the caption gains ` EXT` — a simulated click by level.
+  Colors drawn through `NsDraw` pack as **0xRRGGBBAA** (alpha in the LOW
+  byte, per `nodesim_plugin.h`); pack with the base's `pack()` helper — a
+  0xAARRGGBB literal compiles silently and renders blended/miscolored.
 - `nsui::Control` generic blobs for the rest (e.g. `entrada01` and `saida01`,
   also in `controles.cpp`).
 

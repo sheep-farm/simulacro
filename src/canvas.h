@@ -39,6 +39,7 @@ public:
     void zoomReset();
     void centerOnGraph();
     void requestFit();   // deferred fit (AUI settles after load)
+    void ensureInView(); // auto-refit (bounded) when nodes fall out of view
     void refreshFromModel();
 
     void setShowValues(bool v) { showVals_ = v; Refresh(false); }
@@ -188,4 +189,6 @@ private:
     bool dragging_ = false;
     bool moved_ = false;
     int frameDelay_ = 0; // requestFit counter (paints until re-fit)
+    int fitRound_ = 0;   // Auto-refit rounds after load (bounded a 3)
+    float lastFitW_ = 0, lastFitH_ = 0; // pane size used by the last fit
 };

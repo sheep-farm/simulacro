@@ -156,6 +156,23 @@ void GraphCanvas::onPaint(wxPaintEvent&) {
 }
 
 void GraphCanvas::onSize(wxSizeEvent& ev) {
+    // Refit when a load's follow-up pane resize is substantial (max 3 rounds):
+    // loadFile fits with the stale pane size, so load-time graphs {"caíam" da
+    // view} quando o AUI terminava de assentar. Refit IMEDIATO: em repouso
+    // (PAUSED) não chegam mais paints para despachar um fit adiado.
+    if (fitRound_ >= 1 && fitRound_ < 3 && lastFitW_ > 1 && lastFitH_ > 1) {
+        const wxSize sz = GetClientSize();
+        const float dw = std::fabs((float)sz.x - lastFitW_) / std::max(1.0f, lastFitW_);
+        const float dh = std::fabs((float)sz.y - lastFitH_) / std::max(1.0f, lastFitH_);
+        if (dw > 0.25f || dh > 0.25f) {
+            centerOnGraph();
+            if (fitRound_ < 3) ++fitRound_;
+            frameDelay_ = 0;
+            Refresh(false);
+            ev.Skip();
+            return;
+        }
+    }
     Refresh(false);
     ev.Skip();
 }
@@ -337,6 +354,7 @@ void GraphCanvas::drawPending() {
 
 void GraphCanvas::drawNodes() {
     SDL_Renderer* r = bmp_.ren();
+    ensureInView();
     for (const auto& n : e_->g.nodes) {
         if (nodeHidden(n.id)) continue;
         FRect wb = nodeBox(n);
@@ -1486,6 +1504,45 @@ void GraphCanvas::zoomReset() {
     centerOnGraph();
 }
 
+void GraphCanvas::ensureInView() {
+    // Reflexo da carga: quando TODOS os nós estão fora da área visível após
+    // os panes assentarem, refit (limitado a 3 rodadas; não afeta o zoom do
+    // usuário quando eles estão na tela).
+    if (fitRound_ == 0 || fitRound_ >= 3 || e_->g.nodes.empty()) return;
+    static const bool dbg = std::getenv("NODESIM_DEBUG_UI") != nullptr;
+    FRect bb{1e9f, 1e9f, -1e9f, -1e9f};
+    for (const auto& n : e_->g.nodes) {
+        FRect b = nodeBox(n);
+        bb.x = std::min(bb.x, b.x);
+        bb.y = std::min(bb.y, b.y);
+        bb.w = std::max(bb.w, b.x + b.w);
+        bb.h = std::max(bb.h, b.y + b.h);
+    }
+    // box visível (em coords de mundo) do viewport atual
+    Vec2 vTL = s2w({0, 0});
+    Vec2 vBR = s2w({(float)bmp_.width(), (float)bmp_.height()});
+    const FRect view{vTL.x, vTL.y, vBR.x - vTL.x, vBR.y - vTL.y};
+    // fração do grafo visível: exigir sobreposição SUBSTANCIAL (um calço de
+    // poucos px conta como invisível: o fit rodou com outro tamanho de pane)
+    const float ox0 = std::max(bb.x, view.x), ox1 = std::min(bb.w, view.x + view.w);
+    const float oy0 = std::max(bb.y, view.y), oy1 = std::min(bb.h, view.y + view.h);
+    const float frac = ox1 > ox0 && oy1 > oy0
+                           ? ((ox1 - ox0) * (oy1 - oy0)) /
+                                 std::max(1.0f, (bb.w - bb.x) * (bb.h - bb.y))
+                           : 0.0f;
+    bool vis = frac >= 0.3f;
+    if (dbg)
+        std::fprintf(stderr,
+                     "drawNodes n=%zu zoom=%.2f cam=(%.0f,%.0f) bmp=%dx%d vis=%.2f\n",
+                     e_->g.nodes.size(), (double)zoom_, (double)camX_, (double)camY_,
+                     bmp_.width(), bmp_.height(), frac);
+    if (vis) return;
+    ++fitRound_;
+    // refit imediato: em painéis parados (PAUSED) NÃO chegam mais paints,
+    // então um fit "adiado" fica órfão; GetClientSize() já é o size assentado.
+    centerOnGraph();
+}
+
 void GraphCanvas::requestFit() {
     frameDelay_ = 12;   // paints until re-fit (pane layout settles)
 }
@@ -1509,6 +1566,12 @@ void GraphCanvas::centerOnGraph() {
     if (zoom_ < 0.15f) zoom_ = 0.15f;
     camX_ = (x0 + x1) * 0.5f - sz.x / (2 * zoom_);
     camY_ = (y0 + y1) * 0.5f - sz.y / (2 * zoom_);
+    // todo fit grava o tamanho do pane em que coube: os refits automáticos
+    // (onSize/ensureInView) comparam contra ESTE tamanho, não contra o do
+    // último paint — que pode nunca chegar (painel ocioso => fome de paints).
+    lastFitW_ = (float)sz.x;
+    lastFitH_ = (float)sz.y;
+    if (fitRound_ == 0) fitRound_ = 1; // abre a cadeia dos refits automáticos
     Refresh(false);
 }
 

@@ -55,6 +55,18 @@ Everything runs on the wx main thread. A `wxTimer` ticks at the selected rate
 canvas; scope pages refresh on a slower cadence. No OpenGL/SDL window is
 created, so there are no platform event loops to reconcile.
 
+**Canvas refit (paint starvation):** while PAUSED / idle the wx canvas paints
+only on damage — a load-time `requestFit()` (12 paints) may never run after
+the AUI/panes settle. The auto-refit is therefore IMMEDIATE and bounded:
+
+- `centerOnGraph()` records the pane size it fit into (`lastFitW_/lastFitH_`)
+  and opens the bounded chain (`fitRound_`, ≤3);
+- `onSize()` refits right away when the pane changes ≥25% against the last
+  fit size;
+- `ensureInView()` (bounded by the same chain) refits when the graph is less
+  than 30% inside the visible viewport — the sliver case counts as invisible;
+- a manual Fit resets the chain by bumping `fitRound_` from 0.
+
 ## Compliance
 
 - `.nodesim` format 10 is read and written by the core; the smoke suite plus

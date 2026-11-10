@@ -109,6 +109,11 @@ void Engine::refreshPluginLabels() {
         n.szH = rt ? (float)rt->prefH : 0;
         n.shape = rt ? rt->shape : 0;
         if (!rt || rt->ui.empty()) continue;
+#if defined(SIMULACRO_NODE_UI)
+        // Sizing para widgets em nó: apenas para nós BOX com strip declarada.
+        // Controles CUSTOM-DRAWN (kCustomShape) se dimensionam pelo pref do
+        // próprio tipo (kPrefW/kPrefH): o desenho deles não depende da strip.
+        if (rt->shape == NS_SHAPE_CUSTOM) continue;
         // rows needed by the declared layout (kinds that occupy one row each)
         float rows = 0;
         for (const auto& it : rt->ui) {
@@ -119,6 +124,7 @@ void Engine::refreshPluginLabels() {
         const float needH = 18.0f * rows + 10.0f;   // NODE_ROW_H ~ world units
         if (n.szH < needH) n.szH = needH;
         if (n.szW < 200.0f) n.szW = 200.0f;         // roomy inline widgets
+#endif // SIMULACRO_NODE_UI
     }
 }
 std::string Engine::initialBlob(const Node& n) { return g.initialBlob(n, plugins); }
