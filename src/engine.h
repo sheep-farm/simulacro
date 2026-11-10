@@ -81,6 +81,16 @@ struct Engine {
     void sampleScopes();
     std::string nodeLabel(const Node& n) const;
     const PluginManager::RegType* typeOf(const Node& n) const;
+    // Canvas-click do plugin (additive ABI 14): devolve o ato declarado pelo
+    // tipo (kind + params[] index) ou {}. `kind` NS_ACT_HOLD (aperta/solta) ou
+    // NS_ACT_TOGGLE (cada clique alterna). Registrado por NS_PLUGIN_ACTS.
+    struct ClickAct { int kind = 0; int param = -1; };
+    ClickAct clickAct(const Node& n) const;
+    // Executa a transição do ato (usado pelo canvas em cliques):
+    //   HOLD: value=1 na pressão, 0 na soltura; TOGGLE: vira !value.
+    // Não gera checkpoint de undo (é interação de painel, não edição).
+    void runClickAct(const Node& n, const ClickAct& act, bool pressValue);
+    void toggleClickAct(const Node& n, const ClickAct& act);
 
     // scope maps (same semantics as nodesim)
     void ensureMapState(const Node& n, ScopeData& d);

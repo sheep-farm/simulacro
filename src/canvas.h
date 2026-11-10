@@ -161,6 +161,10 @@ private:
     bool widgetUndoActive_ = false;  // ImGui widget gesture (1 undo checkpoint)
     int widgetNode_ = -1;
 
+    // canvas-click do controle (NS_PLUGIN_ACTS): "pulsa" 1 na pressão, 0 no soltado
+    int actNode_ = -1;
+    int actParam_ = -1;
+
     // rubber band
     bool rubber_ = false;
     Vec2 rubberStart_{0, 0};

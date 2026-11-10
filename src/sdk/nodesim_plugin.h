@@ -27,6 +27,8 @@
 //    switches, combos, inputs, LEDs) bound to params/texts of the same type
 //    (NS_PLUGIN_UI). The host renders it; plugins without the symbol keep
 //    the generic parameter editor.
+//  - `nodesim_plugin_acts()` declares canvas CLICK actions driven by the
+//    host on a params[] entry (pushdown/hold or toggle) — NS_PLUGIN_ACTS.
 #pragma once
 
 #define NODESIM_PLUGIN_API 14
@@ -478,5 +480,43 @@ struct NsUiTable {
         static const NsUiTable ns_ui_ = {                                    \
             NODESIM_PLUGIN_API, (int)sizeof(NsUiTable), (n_), (specs_)};     \
         return &ns_ui_;                                                      \
+    }
+
+// ---- Canvas CLICK actions (additive extension of ABI 14) ----
+// Declares which parameter(s) a type wants the HOST to drive when the user
+// clicks (presses) the node *body* on the canvas — the "panel control"
+// contract. Two kinds:
+//   NS_ACT_HOLD   : while the button is held the host sets param=1 and on
+//                   release sets param=0 (pushdown/momentary);
+//   NS_ACT_TOGGLE : each click flips the param (0/1) (switch/latch).
+// `param` is the params[] index driven by the host. While the act fires the
+// host does NOT create undo checkpoints and does NOT start node dragging
+// (panel control semantics; move the node via the property grid or by fixing
+// its x/y). Third-party plugins derive from nsui::Pushdown / nsui::Switch in
+// nodesim_ui_base.h (state, hooks and authored design included) and declare
+// the matching act; the host validates the table like every other one.
+enum NsActKind {
+    NS_ACT_HOLD = 1,   // press+hold: param=1 while down, param=0 on release
+    NS_ACT_TOGGLE = 2, // each click flips the param (latch)
+};
+
+struct NsAct {
+    const char* type; // NsNodeType id (must exist in the same .so)
+    int kind;         // NsActKind
+    int param;        // params[] index driven by the click
+};
+
+struct NsActTable {
+    int api;           // == NODESIM_PLUGIN_API
+    int struct_size;   // sizeof(NsActTable); 0 = minimal table
+    int num_entries;   // 0..1024
+    const NsAct* entries;
+};
+
+#define NS_PLUGIN_ACTS(entries_, n_)                                          \
+    extern "C" const NsActTable* nodesim_plugin_acts() {                       \
+        static const NsActTable ns_acts_ = {                                   \
+            NODESIM_PLUGIN_API, (int)sizeof(NsActTable), (n_), (entries_)};   \
+        return &ns_acts_;                                                      \
     }
 

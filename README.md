@@ -9,10 +9,11 @@ wx panels:
 
 - engine under `src/core/` and the built-in plugin sources under `plugins/`;
 - built-in **controls as node plugins** built on the `nsui::Control` C++
-  base (`src/sdk/nodesim_ui_base.h`): `push` (botão pushdown [0;1]),
-  `entrada01` (entrada [0;1] com o valor editável) e `saida01` (saída [0;1]
-  com display autoral do plugin). Terceiros podem criar os seus próprios
-  por **herança** e `NS_PLUGIN_UI` opcional para widgets no nó (docs/abi.md);
+  base (`src/sdk/nodesim_ui_base.h`): `push` (**botão pushdown clicável** no
+  canvas via `NS_PLUGIN_ACTS`, out [0;1]), `entrada01` (entrada [0;1] com o
+  valor editável) e `saida01` (saída [0;1] com display autoral do plugin).
+  Terceiros criam os seus por **herança** de `nsui::Control` / `nsui::Pushdown`
+  e `NS_PLUGIN_ACTS` opcional (`NS_PLUGIN_UI` para widgets no nó, docs/abi.md);
 - file format `.nodesim` (format 10) and plugin **ABI 14** unchanged, so
   existing files and plugins keep working as before;
 - headless runner (`--run`), port traces and numeric regression through

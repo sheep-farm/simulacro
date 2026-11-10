@@ -338,6 +338,28 @@ std::string Engine::nodeLabel(const Node& n) const {
     return nodeTypeName(n.type);
 }
 
+Engine::ClickAct Engine::clickAct(const Node& n) const {
+    ClickAct out;
+    const auto* rt = typeOf(n);
+    if (!rt || rt->acts.empty()) return out;
+    out.kind = rt->acts.front().kind;
+    out.param = rt->acts.front().param;
+    return out;
+}
+
+void Engine::runClickAct(const Node& n, const ClickAct& act, bool pressValue) {
+    if (act.kind != NS_ACT_HOLD || act.param < 0 || !n.pinst) return;
+    n.pinst->callSetParam(n.pinst->handle, act.param, pressValue ? 1.0 : 0.0);
+    refreshPstate(*const_cast<Node*>(&n)); // painel: sem checkpoint (interação)
+}
+
+void Engine::toggleClickAct(const Node& n, const ClickAct& act) {
+    if (act.kind != NS_ACT_TOGGLE || act.param < 0 || !n.pinst) return;
+    const double cur = n.pinst->callGetParam(n.pinst->handle, act.param);
+    n.pinst->callSetParam(n.pinst->handle, act.param, cur > 0.5 ? 0.0 : 1.0);
+    refreshPstate(*const_cast<Node*>(&n));
+}
+
 const PluginManager::RegType* Engine::typeOf(const Node& n) const {
     if (n.type != NodeType::PLUGIN) return nullptr;
     return plugins.find(n.plugin);

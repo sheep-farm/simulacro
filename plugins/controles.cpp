@@ -9,9 +9,10 @@
 // estado (paramGet/paramSet) + step. Este arquivo é também o exemplo de
 // "como escrever um controle como plugin de terceiros" (docs/abi.md).
 //
-//   push       Botão pushdown: out[0] = 1 enquanto `pulsa` (0/1). Com o
-//              editor de widgets no canvas habilitado, o switch fica dentro
-//              do nó; no editor padrão, o valor entra pelo wxPropertyGrid.
+//   push       Botão pushdown HERDÁVEL (nsui::Pushdown): out[0] = 1
+//              enquanto pressionado no canvas (NS_ACT_HOLD) e 0 na soltura;
+//              sem canvas, o valor entra pelo wxPropertyGrid. Terceiros
+//              derivam e obtêm o mesmo comportamento (docs/abi.md).
 //   entrada01  Entrada [0;1]: out[0] = `valor` (0..1). Slider no canvas com
 //              a UI declarada; caso contrário, pelo editor padrão.
 //   saida01    Saída [0;1]: entrada[n] [0;1]; renderiza o valor dentro do
@@ -29,36 +30,28 @@ static const int kIn = 1;   // entradas no tipo (1)
 static const int kOut = 1;  // portas de saída (1)
 
 // ------------------------------------------------------------------ botão
-struct Botao : nsui::Control {
+// Botɔ pushdown POR HERANÇA de nsui::Pushdown (src/sdk/nodesim_ui_base.h):
+// a base traz estado, hooks e o desenho autoral; aqui restam a identidade,
+// a cor e a tabela de ACTS (o contrato que diz ao host *onde* clicar):
+//   {"push", NS_ACT_HOLD, 0} = params[0] (pulsa) vai a 1 enquanto o botão
+//   está pressionado no canvas e volta a 0 na soltura (pushdown de verdade).
+// Um plugin de terceiros que queira o MESMO comportamento deriva de
+// nsui::Pushdown (ou declara NS_PLUGIN_ACTS no seu próprio param) — o
+// host trata qualquer tipo assim, sem pré-conhecer nada.
+struct Botao : nsui::Pushdown {
     static constexpr const char* kTypeId = "push";
     static constexpr const char* kLabel = "Botão (pushdown)";
-    static void defColor(int rgb[3]) { rgb[0] = 120; rgb[1] = 235; rgb[2] = 180; }
-    static const int kNumParams = 1;
-    static const NsParam kParams[kNumParams];
-    static const int kDefIn = kIn;
-    static const int kPrefW = 0;
-    static const int kPrefH = 0;
-    static const bool kCustomShape = false;
-    static const bool kSelfOut = true;
-    static const int kNumOut = 1;
-
-    double pulsa = 0.0; // [0;1]
-
-    const NsParam* params() { return kParams; }   // (não usado pela base)
-    double paramGet(int i) const override { return i == 0 ? pulsa : 0.0; }
-    void paramSet(int i, double v) override {
-        if (i == 0) pulsa = (v > 0.5) ? 1.0 : 0.0;
-    }
-    double step(const NsContext& c) override {
-        (void)c;
-        return pulsa > 0.5 ? 1.0 : 0.0;
+    static void defColor(int rgb[3]) {
+        rgb[0] = 120;
+        rgb[1] = 235;
+        rgb[2] = 180;
     }
 };
 
-const NsParam Botao::kParams[Botao::kNumParams] = {
-    {"pulsa", 0, 1, 0, NS_PARAM_BOOL, 1, nullptr,
-     "estado do botão: 1 = pressionado", 0, nullptr},
+static const NsAct kActsBotao[] = {
+    {"push", NS_ACT_HOLD, 0},
 };
+NS_PLUGIN_ACTS(kActsBotao, 1);
 
 // ---------------------------------------------------------------- entrada
 struct Entrada01 : nsui::Control {
@@ -76,6 +69,8 @@ struct Entrada01 : nsui::Control {
 
     double valor = 0.5; // [0;1]
 
+    int numParams() const override { return kNumParams; }
+    const NsParam* params() const override { return kParams; }
     double paramGet(int i) const override { return i == 0 ? valor : 0.0; }
     void paramSet(int i, double v) override {
         if (i == 0) {

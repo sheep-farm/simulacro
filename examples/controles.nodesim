@@ -1,6 +1,6 @@
 nodesim 10
 # controles nativos (push, entrada01, saida01) um exemplo de uso
-node 0 0 400 0 0 "" "push" "pulsa=1" 1 1 0 2 "botão" ""
-node 1 0 680 0 0 "" "entrada01" "valor=0.5" 1 1 0 2 "potenciômetro" ""
+node 0 1 400 0 0 "" "push" "pulsa=1" 1 1 0 2 "botão" ""
+node 1 1 680 0 0 "" "entrada01" "0.5" 1 1 0 2 "potenciômetro" ""
 node 2 1 980 0 0 "" "saida01" "" 1 1 0 2 "display" ""
 edge 1 0 2 0

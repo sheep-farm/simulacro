@@ -579,4 +579,82 @@ int loadUi(PluginRegistry& pm, size_t libIndex) {
 }
 
 
+
+// ---- Canvas CLICK actions (additive ABI 14 extension: nodesim_plugin_acts) --
+int loadActs(PluginRegistry& pm, size_t libIndex) {
+    if (libIndex >= pm.libs.size()) return 0;
+    PluginRegistry::Lib& lib = pm.libs[libIndex];
+    dlerror();
+    auto sym = (const NsActTable* (*)())dlsym(lib.h, "nodesim_plugin_acts");
+    if (!sym) {
+        dlerror(); // absence is normal
+        return 0;
+    }
+    const NsActTable* table = sym();
+    if (!table) {
+        pm.addProblem(lib.file, "nodesim_plugin_acts returned null");
+        return 0;
+    }
+    if (table->api != NODESIM_PLUGIN_API) {
+        pm.addProblem(lib.file, "acts table with ABI " + std::to_string(table->api) +
+                                    " (expected " + std::to_string(NODESIM_PLUGIN_API) + ")");
+        return 0;
+    }
+    if (table->struct_size != 0 && table->struct_size < (int)sizeof(NsActTable)) {
+        pm.addProblem(lib.file, "acts struct_size " +
+                                    std::to_string(table->struct_size) +
+                                    " smaller than NsActTable (" +
+                                    std::to_string(sizeof(NsActTable)) + ")");
+        return 0;
+    }
+    if (table->num_entries < 0 || table->num_entries > 1024) {
+        pm.addProblem(lib.file, "invalid num_entries in the acts table");
+        return 0;
+    }
+    if (table->num_entries > 0 && !table->entries) {
+        pm.addProblem(lib.file, "num_entries > 0 without an acts table");
+        return 0;
+    }
+
+    auto pluginKind = [&](const std::string& id) -> PluginRegistry::RegType* {
+        for (auto& t : pm.types)
+            if (t.lib == (int)libIndex && t.id == id) return &t;
+        return nullptr;
+    };
+
+    int applied = 0;
+    for (int i = 0; i < table->num_entries; ++i) {
+        const NsAct& a = table->entries[i];
+        const std::string id = a.type ? a.type : "";
+        if (id.empty()) {
+            pm.addProblem(lib.file, "act without type (ignored)");
+            continue;
+        }
+        PluginRegistry::RegType* t = pluginKind(id);
+        if (!t) {
+            pm.addProblem(lib.file, "act for unknown type: " + id);
+            continue;
+        }
+        if (a.kind != NS_ACT_HOLD && a.kind != NS_ACT_TOGGLE) {
+            pm.addProblem(lib.file, "invalid kind in act of '" + id + "'");
+            continue;
+        }
+        if (a.param < 0 || a.param >= (int)t->params.size()) {
+            pm.addProblem(lib.file, "act of '" + id + "' with an out-of-range param index");
+            continue;
+        }
+        bool dup = false;
+        for (const auto& d : t->acts)
+            if (d.param == a.param) dup = true;
+        if (dup) {
+            pm.addProblem(lib.file, "duplicate act on param " +
+                                        std::to_string(a.param) + " of '" + id + "'");
+            continue;
+        }
+        t->acts.push_back({a.kind, a.param});
+        ++applied;
+    }
+    return applied;
+}
+
 } // namespace plugin_loader

@@ -501,6 +501,52 @@ void GraphCanvas::drawNodes() {
     }
 }
 
+void GraphCanvas::onLeftUp(wxMouseEvent& ev) {
+#if defined(SIMULACRO_NODE_UI)
+    if (imui::enabled()) {
+        eventToImGui(ev);
+        imui::mouseButton(0, false);
+    }
+#endif
+    // fim da pressão do controle no canvas (NS_PLUGIN_ACTS / HASH_HOLD)
+    if (actNode_ >= 0 && actParam_ >= 0) {
+        if (Node* nRel = e_->g.find(actNode_)) {
+            const Engine::ClickAct act = e_->clickAct(*nRel);
+            if (act.kind == NS_ACT_HOLD) e_->runClickAct(*nRel, act, false);
+            if (onParamEdited) onParamEdited(actNode_);
+        }
+        actNode_ = -1;
+        actParam_ = -1;
+        Refresh(false);
+        return;
+    }
+
+    if (!dragging_) return;
+    dragging_ = false;
+    mouse_ = ev.GetPosition();
+    mouseWorld_ = s2w({(float)mouse_.x, (float)mouse_.y});
+    if (HasCapture()) ReleaseMouse();
+
+    if (pending_) {
+        connectPending(mouseWorld_);
+    } else if (rubber_) {
+        rubber_ = false;
+        const float x0 = std::min(rubberStart_.x, rubberCur_.x);
+        const float x1 = std::max(rubberStart_.x, rubberCur_.x);
+        const float y0 = std::min(rubberStart_.y, rubberCur_.y);
+        const float y1 = std::max(rubberStart_.y, rubberCur_.y);
+        for (const auto& n : e_->g.nodes) {
+            if (nodeHidden(n.id)) continue;
+            if (n.pos.x >= x0 && n.pos.x <= x1 && n.pos.y >= y0 && n.pos.y <= y1)
+                sel_.insert(n.id);
+        }
+        notifySelection();
+    } else {
+        endMove();
+    }
+    Refresh(false);
+}
+
 void GraphCanvas::drawRubber() {
     if (!rubber_) return;
     Vec2 a = w2s(rubberStart_), b = w2s(rubberCur_);
@@ -1093,6 +1139,42 @@ void GraphCanvas::onLeftDown(wxMouseEvent& ev) {
         return;
     }
 
+    // Canvas CLICK do controle (NS_PLUGIN_ACTS / additive ABI 14): o ato
+    // está DECLARADO pelo plugin; o host aperta/solta o param no corpo do
+    // nó. Sem arrasto do nó (controle de painel) e sem checkpoint de undo.
+    const int nidAct = nodeAt(mouseWorld_);
+    if (nidAct >= 0) {
+        if (const Node* nA = e_->g.find(nidAct)) {
+            const Engine::ClickAct act = e_->clickAct(*nA);
+            if (act.kind == NS_ACT_HOLD) {
+                actNode_ = nidAct;
+                actParam_ = act.param;
+                e_->runClickAct(*nA, act, true);
+                if (onParamEdited) onParamEdited(nidAct);
+                if (!add) {
+                    sel_.clear();
+                    selWires_.clear();
+                    sel_.insert(nidAct);
+                }
+                notifySelection();
+                Refresh(false);
+                return;
+            }
+            if (act.kind == NS_ACT_TOGGLE) {
+                e_->toggleClickAct(*nA, act);
+                if (onParamEdited) onParamEdited(nidAct);
+                if (!add) {
+                    sel_.clear();
+                    selWires_.clear();
+                    sel_.insert(nidAct);
+                }
+                notifySelection();
+                Refresh(false);
+                return;
+            }
+        }
+    }
+
     const int gid = groupHeaderAt(mouseWorld_);
     if (gid >= 0) {
         const Group* gr = e_->g.findGroup(gid);
@@ -1213,48 +1295,6 @@ void GraphCanvas::connectPending(Vec2 world) {
     pending_ = false;
     pendingFrom_ = -1;
     notifySelection();
-}
-
-void GraphCanvas::onLeftUp(wxMouseEvent& ev) {
-    if (imui::enabled()) {
-#if defined(SIMULACRO_NODE_UI)
-        eventToImGui(ev);
-        imui::mouseButton(0, false);
-#endif
-    }
-    if (widgetUndoActive_) {
-        widgetUndoActive_ = false;
-        const int id = widgetNode_;
-        widgetNode_ = -1;
-        if (HasCapture()) ReleaseMouse();
-        Refresh(false);
-        if (id >= 0 && onParamEdited) onParamEdited(id);
-        return;  // gesture ended on a widget: the canvas did not start a drag
-    }
-    if (!dragging_) return;
-    dragging_ = false;
-    mouse_ = ev.GetPosition();
-    mouseWorld_ = s2w({(float)mouse_.x, (float)mouse_.y});
-    if (HasCapture()) ReleaseMouse();
-
-    if (pending_) {
-        connectPending(mouseWorld_);
-    } else if (rubber_) {
-        rubber_ = false;
-        const float x0 = std::min(rubberStart_.x, rubberCur_.x);
-        const float x1 = std::max(rubberStart_.x, rubberCur_.x);
-        const float y0 = std::min(rubberStart_.y, rubberCur_.y);
-        const float y1 = std::max(rubberStart_.y, rubberCur_.y);
-        for (const auto& n : e_->g.nodes) {
-            if (nodeHidden(n.id)) continue;
-            if (n.pos.x >= x0 && n.pos.x <= x1 && n.pos.y >= y0 && n.pos.y <= y1)
-                sel_.insert(n.id);
-        }
-        notifySelection();
-    } else {
-        endMove();
-    }
-    Refresh(false);
 }
 
 void GraphCanvas::onMotion(wxMouseEvent& ev) {

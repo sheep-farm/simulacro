@@ -55,6 +55,7 @@ int PluginManager::scanDirs(const std::vector<std::string>& wanted) {
             plugin_loader::loadExec(*this, (size_t)libIndex);
             plugin_loader::loadEvents(*this, (size_t)libIndex);
             plugin_loader::loadUi(*this, (size_t)libIndex);
+            plugin_loader::loadActs(*this, (size_t)libIndex);
         }
         closedir(d);
     }

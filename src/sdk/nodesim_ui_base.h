@@ -37,7 +37,23 @@ namespace nsui {
 // (shadowing) e implementam o estado (paramGet/paramSet/textGet/textSet e o
 // step). O que não for sobrescrito usa o default abaixo.
 struct Control {
+    // identidade (subclasses conferem/contribuem; usado no design default)
+    static void defColor(int rgb[3]) {
+        rgb[0] = 200;
+        rgb[1] = 200;
+        rgb[2] = 200;
+    }
+
     virtual ~Control() = default;
+
+    // ---- tabelas (a base lê por virtual: os STATICS da subclasse ficam
+    //      invisíveis para funções definidas em Control; forneça por override)
+    virtual int numParams() const { return 0; }
+    virtual const NsParam* params() const { return nullptr; }
+    virtual int numTexts() const { return 0; }
+    virtual const char* const* texts() const { return nullptr; }
+    // plugin decide o nº de saídas (com kSelfOut)
+    virtual int numOut() const { return 1; }
 
     // ---- estado do controle (implementar) ----
     virtual double paramGet(int i) const {
@@ -70,27 +86,29 @@ struct Control {
     }
     virtual void draw(const NsDraw*, const NsRect*) {}
     // with kSelfOut: the host asks the plugin how many outputs it wants now
-    virtual int numOut() const { return 0; }
 
     // ---- blob automático de estado (params + texts) ----
     // Formato compatível com os built-ins: "nome=valor" (espaço) e
     // textos como nome="texto" (escapes de \" e \\).
     virtual std::string saveBlob() const {
         std::string blob;
-        for (int i = 0; i < kNumParams; ++i) {
+        const int npar = numParams();
+        const NsParam* par = params();
+        for (int i = 0; i < npar; ++i) {
             if (!blob.empty()) blob += ' ';
-            blob += kParams[i].name;
+            blob += par[i].name;
             blob += '=';
             char buf[64];
             std::snprintf(buf, sizeof buf, "%.17g", paramGet(i));
             blob += buf;
         }
-        for (int i = 0; i < kNumTexts; ++i) {
-            const char* s = textGet(i);
+        const int ntx = numTexts();
+        const char* const* tnames = texts();
+        for (int i = 0; i < ntx; ++i) {
             if (!blob.empty()) blob += ' ';
-            blob += kTexts[i];
+            blob += tnames[i];
             blob += "=\"";
-            for (const char* p = s ? s : ""; *p; ++p) {
+            for (const char* p = textGet(i) ? textGet(i) : ""; *p; ++p) {
                 if (*p == '"' || *p == '\\') blob += '\\';
                 blob += *p;
             }
@@ -99,6 +117,29 @@ struct Control {
         return blob;
     }
     virtual int loadBlob(const std::string& blob) {
+        // positional fallback: a blob with only numbers/spaces (no '=')
+        // assigns values in order to params[] — the convention of the single-
+        // param built-ins (e.g. pgain) — so plain numbers keep working.
+        const bool hasEq = blob.find('=') != std::string::npos;
+        if (!hasEq && numParams() > 0) {
+            int applied = 0;
+            size_t pos = 0;
+            int idx = 0;
+            while (pos < blob.size() && idx < numParams()) {
+                while (pos < blob.size() && (blob[pos] == ' ' || blob[pos] == '\t'))
+                    ++pos;
+                if (pos >= blob.size()) break;
+                char* e = nullptr;
+                const double v = std::strtod(blob.c_str() + pos, &e);
+                if (e != blob.c_str() + pos) {
+                    paramSet(idx, v);
+                    ++applied;
+                    ++idx;
+                    pos = (size_t)(e - blob.c_str());
+                } else ++pos;
+            }
+            if (applied > 0) return applied;
+        }
         int applied = 0;
         size_t pos = 0;
         while (pos < blob.size()) {
@@ -125,14 +166,18 @@ struct Control {
                 pos = e;
             }
             bool hit = false;
-            for (int i = 0; i < kNumParams; ++i) {
-                if (key == kParams[i].name) {
+            const int npar = numParams();
+            const NsParam* par = params();
+            for (int i = 0; i < npar; ++i) {
+                if (key == par[i].name) {
                     paramSet(i, value.empty() ? 0.0 : std::strtod(value.c_str(), nullptr));
                     hit = true;
                 }
             }
-            for (int i = 0; i < kNumTexts; ++i) {
-                if (key == kTexts[i]) {
+            const int ntx = numTexts();
+            const char* const* tnames = texts();
+            for (int i = 0; i < ntx; ++i) {
+                if (key == tnames[i]) {
                     textSet(i, value.c_str());
                     hit = true;
                 }
@@ -260,5 +305,104 @@ NsNodeType makeType() {
     }
     return t;
 }
+
+
+// ---- Pushdown base (herança para "botões" de painel) ----
+// Um controle de painel cuja SAÍDA publica [0;1] e cujo corpo É o botão:
+//   - estado interno `pressed_` ligado ao params[0] (BOOL, nome `pulsa`);
+//   - paramGet/paramSet automáticos + blob automático (via Control);
+//   - `step()` devolve 1.0 enquanto pressionado, 0.0 solto;
+//   - hooks virtuais onPressed()/onReleased() (chamados em transição);
+//   - kCustomShape=true: o corpo É o botão (autorender por draw()); a
+//     subclasse pode sobrescrever draw()/defColor()/kLabel/kMomentary;
+//   - kMomentary=true casa com NS_ACT_HOLD; kMomentary=false casa com
+//     NS_ACT_TOGGLE (mantém 1 após soltar).
+// Terceiros derivam; ambos os contratos (acts + design) ficam na subclasse.
+// Nada no ABI muda: o `.so` segue ABI 14.
+struct Pushdown : Control {
+    bool pressed_ = false;
+
+    // ---- estado via params[0] (`pulsa`) ----
+    double paramGet(int i) const override {
+        return i == 0 ? (pressed_ ? 1.0 : 0.0) : 0.0;
+    }
+    void paramSet(int i, double v) override {
+        if (i != 0) return;
+        const bool want = v > 0.5;
+        if (want == pressed_) return;
+        pressed_ = want;
+        pressed_ ? onPressed() : onReleased();
+    }
+
+    int numOut() const override { return 1; } // uma porta [0;1]
+    int numParams() const override { return 1; }
+    const NsParam* params() const override { return kParams; }
+
+    // ---- simulação ----
+    double step(const NsContext& c) override {
+        (void)c;
+        return pressed_ ? 1.0 : 0.0;
+    }
+
+    // ---- hooks para subclasses ----
+    virtual void onPressed() {}
+    virtual void onReleased() {}
+
+    // ---- design default (kCustomShape=true => draw() autorende o corpo) ----
+    void draw(const NsDraw* g, const NsRect* area) override {
+        if (!g || !area) return;
+        const int x = area->x, y = area->y;
+        const int w = area->w, h = area->h;
+        int rgb[3] = {120, 235, 180};
+        defColor(rgb);
+        const unsigned ring = ((unsigned)rgb[0] << 16) | ((unsigned)rgb[1] << 8) |
+                              (unsigned)rgb[2] | 0xFF000000u;
+        if (!g->rect) return;
+        const int b = std::max(3, std::min(w, h) / 10);
+        // corpo escuro (fundo) + moldura do pushdown
+        g->rect(g->ctx, x, y, w, h, 0xFF0D0D12u);
+        const unsigned face = pressed_
+                                  ? ring
+                                  : (((ring & 0x00FFFFFFu) >> 1) & 0x00FFFFFFu) |
+                                        0xFF101014u;
+        g->rect(g->ctx, x + b, y + b, w - 2 * b, h - 2 * b, face);
+        // bisel: borda interna clara (solto) ou escura (pressionado)
+        const unsigned rim = pressed_ ? 0xFF101018u : 0xFF3C3C4Au;
+        g->rect(g->ctx, x, y, w, b, rim);
+        g->rect(g->ctx, x, y, b, h, rim);
+        // brilho do topo quando solto
+        if (!pressed_) g->rect(g->ctx, x + b + 2, y + b + 1, w - 2 * b - 4, 2,
+                               0xFF2A2A38u);
+        // frame do plug-in
+        g->rect(g->ctx, x, y, w, 1, ring);
+        g->rect(g->ctx, x, y + h - 1, w, 1, ring);
+        g->rect(g->ctx, x, y, 1, h, ring);
+        g->rect(g->ctx, x + w - 1, y, 1, h, ring);
+        // legenda
+        const char* cap = "PUSH";
+        if (g->text) {
+            const int tw = g->textW ? g->textW(g->ctx, cap) : 0;
+            const unsigned tcol = pressed_ ? 0xFF0D0D12u : 0xFFF0F0F8u;
+            g->text(g->ctx, x + (w - tw) / 2, y + h / 2 - 7, cap, tcol);
+        }
+    }
+
+    // ---- constantes padrão do pushdown (subclasse faz shadowing) ----
+    static constexpr int kNumParams = 1;
+    static constexpr NsParam kParams[kNumParams] = {
+        {"pulsa", 0, 1, 0, NS_PARAM_BOOL, 1, nullptr,
+         "pressionado (0/1)", 0, nullptr},
+    };
+    static constexpr bool kMomentary = true; // NS_ACT_HOLD (casar com a tabela)
+    static constexpr bool kSelfOut = true;
+    static constexpr int kNumOut = 1;
+    static constexpr int kDefIn = 1;
+    static constexpr int kPrefW = 96;
+    static constexpr int kPrefH = 64;
+    static constexpr bool kCustomShape = true;
+
+   protected:
+    Pushdown() = default;
+};
 
 } // namespace nsui
