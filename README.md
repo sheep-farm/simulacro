@@ -23,7 +23,11 @@ wx panels:
   `SIMULACRO_IMGUI=0` (or `off`) disables the ImGui layer itself;
   `SIMULACRO_IMGUI_DEBUG=1` logs per-command render errors. Scope charts and
   maps never touch ImGui.
-- **plugin-authored layout (fase 3)**: a type can declare its in-node widget
+- **nodes as ImGui windows (fase 4)**: every non-custom node gets a rounded
+  window chrome (type-colored title bar, title text, hover/selection outline)
+  and the pending wire is drawn on top of nodes while connecting. In build
+  defaults: compiled in (`SIMULACRO_NODE_WINDOW=1`);
+- **plugin-authored layout (fase 3, hidden by default)**: a type can declare its in-node widget
   list with the optional `nodesim_plugin_ui()` symbol (`NS_PLUGIN_UI`), bound
   to `params[]`/`texts[]` (sliders, switches, enums, inputs, LEDs, labels).
   The host renders it, reserves room in the node body so ports do not move,

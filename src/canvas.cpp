@@ -79,6 +79,7 @@ GraphCanvas::GraphCanvas(wxWindow* parent, Engine* engine)
     Bind(wxEVT_MOUSEWHEEL, &GraphCanvas::onMouseWheel, this);
     Bind(wxEVT_LEFT_DCLICK, &GraphCanvas::onDoubleClick, this);
     Bind(wxEVT_KEY_DOWN, &GraphCanvas::onKeyDown, this);
+#if defined(SIMULACRO_NODE_UI)
     Bind(wxEVT_CHAR, [this](wxKeyEvent& ev) {
         if (imui::wantsTextInputNow()) {
             const int uk = ev.GetUnicodeKey();
@@ -88,9 +89,6 @@ GraphCanvas::GraphCanvas(wxWindow* parent, Engine* engine)
         }
         ev.Skip();
     });
-    Bind(wxEVT_ERASE_BACKGROUND, &GraphCanvas::onEraseBackground, this);
-    Bind(wxEVT_MOUSE_CAPTURE_LOST, &GraphCanvas::onCaptureLost, this);
-}
 void GraphCanvas::eventToImGui(const wxMouseEvent& ev) {
     if (!imui::enabled()) return;
     imui::mouseMove(ev.GetPosition().x, ev.GetPosition().y);
@@ -101,6 +99,11 @@ bool GraphCanvas::widgetHit(const wxPoint& p) const {
     return false;
 }
 
+
+#endif // SIMULACRO_NODE_UI
+    Bind(wxEVT_ERASE_BACKGROUND, &GraphCanvas::onEraseBackground, this);
+    Bind(wxEVT_MOUSE_CAPTURE_LOST, &GraphCanvas::onCaptureLost, this);
+}
 // Applies one parameter change through the plugin ABI; engine side stays the
 // same as the property grid path (checkpoint per gesture — see onLeftUp).
 bool GraphCanvas::applyParam(Node* n, int i, double v) {
@@ -136,13 +139,17 @@ void GraphCanvas::onPaint(wxPaintEvent&) {
             if (imui::enabled()) imui::renChanged(bmp_.ren());
         }
         render();
-        if (imui::enabled()) {
-            if (imui::init(bmp_.ren())) {
-                imui::newFrame(sz.x, sz.y);
-                drawNodeWidgets();
-                imui::newFrameEnd();
-                imui::renderFrame(bmp_.ren());
-            }
+        if (imui::enabled() && imui::init(bmp_.ren())) {
+            imui::newFrame(sz.x, sz.y);
+#if defined(SIMULACRO_NODE_WINDOW)
+            drawAllFrameChrome();   // fase 4: nodes as ImGui windows (chrome)
+            drawPendingIm();        // fase 4: pending wire in the fg drawlist
+#endif
+#if defined(SIMULACRO_NODE_UI)
+            drawNodeWidgets();      // fase 1..3 in-node widgets (hidden by default)
+#endif
+            imui::newFrameEnd();
+            imui::renderFrame(bmp_.ren());
         }
         bmp_.present(dc);
     }
@@ -166,7 +173,9 @@ void GraphCanvas::render() {
     drawGroups();
     drawEdges();
     drawNodes();
-    drawPending();
+#if !defined(SIMULACRO_NODE_WINDOW)
+    drawPending();     // fase 1..3 path: SDL pending wire
+#endif
     drawRubber();
     if (zoom_ != 1.0f) {
         const std::string z = std::to_string((int)std::lround(zoom_ * 100)) + "%";
@@ -286,7 +295,10 @@ void GraphCanvas::drawEdges() {
             drawWire(r, {p1.x + 1.5f, p1.y + 1.5f}, d1, {p2.x + 1.5f, p2.y + 1.5f}, d2,
                      curve_ ? WireStyle::CURVE : WireStyle::STRAIGHT, false, delay ? 2 : 0);
     }
+}
 
+void GraphCanvas::drawPending() {
+    SDL_Renderer* r = bmp_.ren();
     if (pending_) {
         Vec2 p1{0, 0}, d1{1, 0}, p2 = mouseWorld_, d2{-1, 0};
         const Node* n = e_->g.find(pendingFrom_);
@@ -489,7 +501,6 @@ void GraphCanvas::drawNodes() {
     }
 }
 
-void GraphCanvas::drawPending() {}
 void GraphCanvas::drawRubber() {
     if (!rubber_) return;
     Vec2 a = w2s(rubberStart_), b = w2s(rubberCur_);
@@ -508,6 +519,129 @@ std::string GraphCanvas::oneLine(const std::string& s) const {
     return o;
 }
 
+#if defined(SIMULACRO_NODE_WINDOW)
+// ---- fase 4: node = ImGui window (chrome) ----
+// Theână SDL renderer keeps the *data* painters (body ink, port labels/values,
+// sparklines, plugin draw hooks) and the wires: they draw exactly as before.
+// TheImGui layer adds the *chrome*: a rounded window frame with the type ring
+// color, the title bar and the title text, the hover/_selection outline, and
+// the pending wire in the foreground draw list (which passes above nodes).
+// Custom-shape plugins (NS_SHAPE_CUSTOM) are skipped: their whole silhouette
+// is authored by the plugin.
+void GraphCanvas::drawNodeChrome(const Node& n) {
+    FRect wb = nodeBox(n);
+    Vec2 tl = w2s({wb.x, wb.y}), br = w2s({wb.x + wb.w, wb.y + wb.h});
+    if (br.x < 0 || br.y < 0 || tl.x > bmp_.width() || tl.y > bmp_.height()) return;
+    ImDrawList* dl = ImGui::GetBackgroundDrawList();
+    const bool selected = sel_.count(n.id) > 0;
+    Uint8 cr = 255, cg = 255, cb = 255;
+    if (n.type == NodeType::PLUGIN) {
+        float rgb[3];
+        if (e_->plugins.colorOf(n.plugin, rgb)) {
+            cr = (Uint8)rgb[0]; cg = (Uint8)rgb[1]; cb = (Uint8)rgb[2];
+        } else {
+            ringColor(n.type, cr, cg, cb);
+        }
+    } else {
+        ringColor(n.type, cr, cg, cb);
+    }
+    const int titleH = std::max(2, (int)(NODE_TITLE_H * zoom_));
+    const float rounding = 6.0f;
+
+    // hover/selection outline outside the window
+    if (selected || n.id == hoverNode_) {
+        const ImVec2 o1(tl.x - (selected ? 3.0f : 2.0f), tl.y - (selected ? 3.0f : 2.0f));
+        const ImVec2 o2(br.x + (selected ? 3.0f : 2.0f), br.y + (selected ? 3.0f : 2.0f));
+        dl->AddRect(o1, o2, selected ? IM_COL32(kUi.strong.r, kUi.strong.g,
+                                       kUi.strong.b, 255)
+                                     : IM_COL32((int)(kUi.strong.r * .75f),
+                                                (int)(kUi.strong.g * .75f),
+                                                (int)(kUi.strong.b * .75f), 255),
+                    rounding);
+    }
+    // dark title bar painted over the SDL one (window header feel)
+    const SDL_Color tbBg = mixColor({cr, cg, cb, 255}, kUi.panel, 0.72f);
+    dl->AddRectFilled(ImVec2(tl.x, tl.y), ImVec2(br.x, tl.y + titleH),
+                      IM_COL32(tbBg.r, tbBg.g, tbBg.b, 255), rounding,
+                      ImDrawFlags_RoundCornersTop);
+#if defined(SIMULACRO_NODE_WINDOW_OVERWRITE_FRAME)
+    // (opt-in) also re-paint the window border in ImGui to win over the SDL one
+    dl->AddRect(ImVec2(tl.x, tl.y), ImVec2(br.x, br.y),
+                IM_COL32(cr, cg, cb, 255), rounding);
+#else
+    (void)cr;
+#endif
+    if (zoom_ >= 0.6f) {
+        const std::string ntitle = e_->nodeLabel(n);
+        const ImU32 fg = contrastColor(tbBg).r;
+        dl->AddText(ImVec2(tl.x + 5, tl.y + 3), fg, ntitle.c_str());
+    }
+}
+
+void GraphCanvas::drawAllFrameChrome() {
+    if (!ImGui::GetCurrentContext()) return;
+    for (const auto& n : e_->g.nodes) {
+        if (nodeHidden(n.id)) continue;
+        if (n.type == NodeType::PLUGIN && n.shape == NS_SHAPE_CUSTOM) continue;
+        drawNodeChrome(n);
+    }
+}
+
+// Pending wire in the *foreground* draw list: passes above node windows.
+void GraphCanvas::drawPendingIm() {
+    if (!pending_ || !ImGui::GetCurrentContext()) return;
+    Vec2 p1{0, 0}, d1{1, 0}, p2 = mouseWorld_, d2{-1, 0};
+    const Node* n = e_->g.find(pendingFrom_);
+    if (n) {
+        if (pendingInput_) {
+            Vec2 wp = inPort(*n, pendingPort_);
+            p2 = w2s(wp);
+            Vec2 po = inDir(*n, pendingPort_);
+            d2 = {-po.x, -po.y};
+            Vec2 to{p2.x - mouse_.x, p2.y - mouse_.y};
+            float l = std::sqrt(to.x * to.x + to.y * to.y);
+            d1 = l > 0.001f ? Vec2{to.x / l, to.y / l} : Vec2{1, 0};
+        } else {
+            Vec2 wp = outPort(*n, pendingPort_);
+            p1 = w2s(wp);
+            d1 = outDir(*n, pendingPort_);
+            Vec2 from{p1.x - mouse_.x, p1.y - mouse_.y};
+            float l = std::sqrt(from.x * from.x + from.y * from.y);
+            d2 = l > 0.001f ? Vec2{from.x / l, from.y / l} : Vec2{-1, 0};
+        }
+    }
+    ImDrawList* dl = ImGui::GetForegroundDrawList();
+    if (curve_ && (std::fabs(d1.x) > 0.001f || std::fabs(d2.x) > 0.001f)) {
+        // ~ the core cubic bezier (wirePoint with off = the same formula)
+        const float off = std::max(30.0f, std::hypot(p2.x - p1.x, p2.y - p1.y) * 0.5f);
+        Vec2 u1 = vnorm(d1), u2 = vnorm(d2);
+        const int N = 24;
+        for (int i = 0; i < N; ++i) {
+            const float u = (float)i / N, t = 1.0f - u;
+            Vec2 a{
+                t * t * t * p1.x + 3 * t * t * u * (p1.x + u1.x * off) +
+                    3 * t * u * u * (p2.x - u2.x * off) + u * u * u * p2.x,
+                t * t * t * p1.y + 3 * t * t * u * (p1.y + u1.y * off) +
+                    3 * t * u * u * (p2.y - u2.y * off) + u * u * u * p2.y,
+            };
+            const float t2 = 1.0f - (float)(i + 1) / N, u2b = (float)(i + 1) / N;
+            Vec2 bq{
+                t2 * t2 * t2 * p1.x + 3 * t2 * t2 * u2b * (p1.x + u1.x * off) +
+                    3 * t2 * u2b * u2b * (p2.x - u2.x * off) + u2b * u2b * u2b * p2.x,
+                t2 * t2 * t2 * p1.y + 3 * t2 * t2 * u2b * (p1.y + u1.y * off) +
+                    3 * t2 * u2b * u2b * (p2.y - u2.y * off) + u2b * u2b * u2b * p2.y,
+            };
+            dl->AddLine(ImVec2(a.x, a.y), ImVec2(bq.x, bq.y),
+                        IM_COL32(kUi.highlight.r, kUi.highlight.g, kUi.highlight.b, 255), 2.0f);
+        }
+    } else {
+        dl->AddLine(ImVec2(p1.x, p1.y), ImVec2(p2.x, p2.y),
+                    IM_COL32(kUi.highlight.r, kUi.highlight.g, kUi.highlight.b, 255), 2.0f);
+    }
+}
+#endif // SIMULACRO_NODE_WINDOW
+
+#if defined(SIMULACRO_NODE_UI)
 // ---- ImGui widgets over/in-node (parameter editors of the selected node) ----
 // Drawn on top of the custom renderer; the UI that moves nodes/wires remains
 // custom. On scope/map views this layer never runs.
@@ -846,6 +980,8 @@ void GraphCanvas::drawNodeWidgets() {
     ImGui::End();
 }
 
+#endif // SIMULACRO_NODE_UI
+
 std::string GraphCanvas::portLabel(const Node& n, int port, bool input) const {
     if (n.pinst) {
         char* s = input ? n.pinst->callPortLabelIn(n.pinst->handle, port)
@@ -928,9 +1064,11 @@ int GraphCanvas::groupBodyAt(Vec2 world) const {
 }
 
 void GraphCanvas::onLeftDown(wxMouseEvent& ev) {
+#if defined(SIMULACRO_NODE_UI)
     eventToImGui(ev);
     imui::mouseButton(0, true);
     if (imui::wantsMouseNow() || widgetHit(ev.GetPosition())) { Refresh(false); return; }
+#endif
     if (dragging_ || rubber_ || panning_) return;
     SetFocus();
     if (!HasCapture()) CaptureMouse();
@@ -1076,8 +1214,10 @@ void GraphCanvas::connectPending(Vec2 world) {
 
 void GraphCanvas::onLeftUp(wxMouseEvent& ev) {
     if (imui::enabled()) {
+#if defined(SIMULACRO_NODE_UI)
         eventToImGui(ev);
         imui::mouseButton(0, false);
+#endif
     }
     if (widgetUndoActive_) {
         widgetUndoActive_ = false;
@@ -1115,15 +1255,19 @@ void GraphCanvas::onLeftUp(wxMouseEvent& ev) {
 }
 
 void GraphCanvas::onMotion(wxMouseEvent& ev) {
+#if defined(SIMULACRO_NODE_UI)
     eventToImGui(ev);
+#endif
     mouse_ = ev.GetPosition();
     mouseWorld_ = s2w({(float)mouse_.x, (float)mouse_.y});
+#if defined(SIMULACRO_NODE_UI)
     if ((imui::wantsMouseNow() || widgetHit(mouse_)) &&
         !dragging_ && !rubber_ && !moving_ && !panning_) {
         Refresh(false);
         ev.Skip();
         return;
     }
+#endif
     if (panning_) {
         const wxPoint d = mouse_ - panStart_;
         camX_ = panCamX_ - d.x / zoom_;
@@ -1149,9 +1293,11 @@ void GraphCanvas::onMotion(wxMouseEvent& ev) {
 }
 
 void GraphCanvas::onRightDown(wxMouseEvent& ev) {
+#if defined(SIMULACRO_NODE_UI)
     eventToImGui(ev);
     imui::mouseButton(1, true);
     if (imui::wantsMouseNow() || widgetHit(ev.GetPosition())) { Refresh(false); return; }
+#endif
     SetFocus();
     mouse_ = ev.GetPosition();
     mouseWorld_ = s2w({(float)mouse_.x, (float)mouse_.y});
@@ -1221,9 +1367,11 @@ void GraphCanvas::addNodeContext(int kind, const std::string& plugin, Vec2 world
 }
 
 void GraphCanvas::onMiddleDown(wxMouseEvent& ev) {
+#if defined(SIMULACRO_NODE_UI)
     eventToImGui(ev);
     imui::mouseButton(2, true);
     if (imui::wantsMouseNow() || widgetHit(ev.GetPosition())) { Refresh(false); return; }
+#endif
     if (HasCapture()) return;
     panning_ = true;
     panStart_ = ev.GetPosition();
@@ -1233,20 +1381,24 @@ void GraphCanvas::onMiddleDown(wxMouseEvent& ev) {
 }
 
 void GraphCanvas::onMiddleUp(wxMouseEvent& ev) {
+#if defined(SIMULACRO_NODE_UI)
     if (imui::enabled()) {
         eventToImGui(ev);
         imui::mouseButton(2, false);
     }
+#endif
     panning_ = false;
     if (HasCapture()) ReleaseMouse();
 }
 
 void GraphCanvas::onMouseWheel(wxMouseEvent& ev) {
+#if defined(SIMULACRO_NODE_UI)
     eventToImGui(ev);
     imui::mouseWheel((float)ev.GetWheelAxis() == 0 ? 0.0f
                                                   : (float)ev.GetWheelDelta() / 120.0f,
                      (float)ev.GetWheelRotation() / 120.0f);
     if (imui::wantsMouseNow() || widgetHit(ev.GetPosition())) return;
+#endif
     const int rot = ev.GetWheelRotation();
     if (!rot) return;
     const float factor = std::pow(1.12f, rot / 120.0f);

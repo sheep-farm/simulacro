@@ -18,6 +18,7 @@ CXXFLAGS = -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -MMD -MP \
            -ffile-prefix-map=$(CURDIR)=. \
            -Isrc -Isrc/core -Isrc/sdk \
            -I$(THIRDPARTY) -I$(THIRDPARTY)/backends \
+           -DSIMULACRO_NODE_WINDOW=1 \
            $(EXTRA_CXXFLAGS) \
            $(shell $(WX_CONFIG) --cxxflags) $(shell sdl2-config --cflags)
 LDLIBS   = $(shell $(WX_CONFIG) --libs std,aui,propgrid) \

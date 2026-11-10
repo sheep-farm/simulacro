@@ -62,6 +62,31 @@ created, so there are no platform event loops to reconcile.
 - Plugins export the same ABI 14 symbols (`src/sdk/nodesim_plugin.h`); the
   built-in sources live in `plugins/` and compile to `plugins/*.so`.
 
+## Dear ImGui layers ("node = window")
+
+Fase 4 makes the *node drawing itself* window-shaped via ImGui. The SDL
+renderer keeps the shared painters (wires, port labels/values, sparklines,
+plugin draw hooks and group chrome) with the same visual hierarchy as before;
+on top of it, an ImDrawList layer paints the *chrome* of every non-custom node
+rounded window frame, colored title bar (type/plugin ring color), title text
+at readable zoom, hover/selection outline and the pending wire in the
+foreground (so it passes above nodes while connecting). Custom-shape plugins
+keep drawing their whole silhouette themselves.
+
+Compile-time switches (`Makefile`/`CMakeLists`):
+
+- `SIMULACRO_NODE_WINDOW=1` (default on, the fase 4 layer) — can be compiled
+  out to get the exact fase-2/3 canvas pipeline with no ImGui chrome.
+- `SIMULACRO_NODE_UI` (default off) — the fase 1..3 *in-node parameter
+  widgets* (rail, `inner` strip, plugin-authored layout). Kept in-tree,
+  behind `#if defined(...)`, because the editing concept earned both fans and
+  critics; nothing of the fase descriptors is deleted. When both flags are
+  set at build time, they cooperate (chrome below, widgets above).
+
+Runtime kill switch (either layer): `SIMULACRO_IMGUI=0/off` skips the shell
+without changing any other behavior; `SIMULACRO_IMGUI_DEBUG=1` logs the
+per-command render of the chrome/widgets under the SDL surface.
+
 ## Dear ImGui widgets (in-node)
 
 The node canvas hosts a scoped Dear ImGui layer (`src/imgui_shell.*`,

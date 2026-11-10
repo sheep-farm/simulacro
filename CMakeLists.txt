@@ -31,6 +31,8 @@ file(GLOB IMGUI_SOURCES "${VENDORED_IMGUI}/imgui.cpp"
     "${VENDORED_IMGUI}/backends/imgui_impl_sdlrenderer2.cpp")
 
 add_executable(simulacro ${CORE_SOURCES} ${UI_SOURCES} ${IMGUI_SOURCES})
+
+target_compile_definitions(simulacro PRIVATE SIMULACRO_NODE_WINDOW=1)
 target_include_directories(simulacro PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core"

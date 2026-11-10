@@ -64,10 +64,19 @@ private:
         std::string blob;
     };
 
-    // ImGui widgets layer (node canvas only; scopes/maps never touch it)
+#if defined(SIMULACRO_NODE_UI)
+    // Fase 1..3 canvas widgets (hidden by default: enable with
+    // -DSIMULACRO_NODE_UI). Kept on purpose; see docs/architecture.md.
     void drawNodeWidgets();            // draws ImGui widgets for the selected node
     void eventToImGui(const wxMouseEvent& ev); // feed position/button state to ImGui
     bool widgetHit(const wxPoint& p) const;   // last-frame widget rectangles
+#endif
+
+#if defined(SIMULACRO_NODE_WINDOW)
+    // Fase 4 layer (nodes as ImGui windows chrome). Compiled in by default.
+    void drawAllFrameChrome();      // ImDrawList paint: each node's frame/title
+    void drawPendingIm();           // pending wire in the foreground ImDrawList
+#endif
 
     void onPaint(wxPaintEvent&);
     void onSize(wxSizeEvent&);
