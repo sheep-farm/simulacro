@@ -71,7 +71,7 @@ plugins: $(PLUGINS)
 
 $(PLUGDIR)/%.so: $(PLUGDIR)/%.cpp $(PLUGDIR)/common.h
 	@mkdir -p $(PLUGDIR)
-	$(CXX) -std=c++17 -O2 -Wall -shared -fPIC -Isrc/core -o $@ $<
+	$(CXX) -std=c++17 -O2 -Wall -shared -fPIC -Isrc/core -Isrc/sdk -o $@ $<
 
 test: $(BIN)/simulacro plugins
 	tests/run.sh

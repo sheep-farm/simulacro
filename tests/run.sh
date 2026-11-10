@@ -73,7 +73,8 @@ else
 fi
 
 # A few more files from the corpus must load without missing plugins
-for f in contador.nodesim logica.nodesim kalman.nodesim; do
+# Controles nativos (push/entrada01/saida01) precisam carregar sem plugins faltando
+for f in contador.nodesim logica.nodesim kalman.nodesim controles.nodesim; do
     [ -f "$EX/$f" ] || continue
     err=$("$BIN" --run "$EX/$f" --steps 3 --summary 2>&1 >/dev/null || true)
     if printf '%s' "$err" | grep -qi 'missing plugin\|could not load'; then
