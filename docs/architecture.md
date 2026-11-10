@@ -55,6 +55,44 @@ Everything runs on the wx main thread. A `wxTimer` ticks at the selected rate
 canvas; scope pages refresh on a slower cadence. No OpenGL/SDL window is
 created, so there are no platform event loops to reconcile.
 
+## Compliance
+
+- `.nodesim` format 10 is read and written by the core; the smoke suite plus
+  `tests/golden/*.csv` guard the step-by-step behavior.
+- Plugins export the same ABI 14 symbols (`src/sdk/nodesim_plugin.h`); the
+  built-in sources live in `plugins/` and compile to `plugins/*.so`.
+
+## Dear ImGui widgets (fase 1)
+
+The node canvas hosts a scoped Dear ImGui layer (`src/imgui_shell.*`,
+vendored under `third_party/imgui/`, backend `imgui_impl_sdlrenderer2`).
+Design rules:
+
+- **Renderer untouched:** scope charts, maps and the wx chrome stay
+  custom; ImGui is only for in-node widgets (parameter rails) in fase 1.
+- **Backend manual:** wxWidgets owns the event loop; the canvas feeds
+  ImGuiIO (`mouseMove/Button/Wheel/Key/Char`) before deciding whether the
+  widget layer should consume the event. A last-frame rectangle list
+  (`widgetBoxes_`) closes the "capture lands on next frame" gap, so clicks
+  over sliders never leak to the canvas selection.
+- **Theme:** the project palette (`kUi`) is mirrored to `ImGuiStyle` at
+  startup and refreshed by `MainFrame::applyTheme()`.
+- **Undo:** every gesture writes through the plugin ABI (`callSetParam`) and
+  is coalesced into a single engine `checkpoint()` (reset on
+  `onLeftUp`/decision); `Engine::undo/redo` now re-applies the restored
+  plugin `pstate` blob over the live instances so param edits undo/redo
+  with the same behavior as topology edits.
+- **Canonical editor:** the wxPropertyGrid is refreshed on gesture end; the
+  property grid remains the source of truth (as it already was for plugin
+  params); the widget rail is a fast-path for the common case.
+- **Kill switch:** `SIMULACRO_IMGUI=0` / `off` disables the layer without
+  changing any other behavior; `SIMULACRO_IMGUI_DEBUG=1` prints per-command
+  render diagnostics (used during integration).
+- **Renderer glue:** `SdlCanvas` signals `rendererRebuilt()` when pane resizes
+  recreate the software renderer; `imui::renChanged()` then rebuilds the
+  shell, because the atlas texture belonged to the renderer that died with
+  the resize.
+
 ## Compatibility (the contracts that replaced the old repo)
 
 - `.nodesim` format 10 is read and written by the core; the smoke suite plus

@@ -6,6 +6,7 @@
 
 #include "canvas.h"
 #include "i18n.h"
+#include "imgui_shell.h"
 #include "palette.h"
 #include "properties.h"
 #include "scopeview.h"
@@ -316,6 +317,9 @@ void MainFrame::bindUi() {
         if (ev.GetKeyCode() == WXK_F5) { onSimReset(dummy); return; }
         if (ev.GetKeyCode() == WXK_F6) { onSimStep(dummy); return; }
         if (focus != canvas_) { ev.Skip(); return; }
+        // ImGui text/nav widgets take the keyboard first: without this rule a
+        // text field in a node widget would have V/G/C/O/Space stolen from it.
+        if (imui::wantsTextInputNow() || imui::wantsKeyboardNow()) { ev.Skip(); return; }
         switch (ev.GetKeyCode()) {
             case WXK_SPACE: onSimToggle(dummy); return;
             case 'V': case 'v': onShowValues(dummy); return;
@@ -337,6 +341,15 @@ void MainFrame::bindUi() {
     canvas_->onSelectionChanged = [this] {
         const int id = canvas_->singleSelection();
         if (props_->node() != id) props_->setNode(id);
+        updateStatus();
+    };
+    // Widget edits (ImGui on the node): keep the property grid as the
+    // canonical view and refresh scope/beat if needed.
+    canvas_->onParamEdited = [this](int id) {
+        const Node* n = engine_.g.find(id);
+        if (n && props_->node() == id) props_->setNode(id);
+        scopes_->refreshNode(id);
+        updateTitle();
         updateStatus();
     };
     canvas_->onDocumentChanged = [this] { documentChanged(true); };
@@ -463,6 +476,7 @@ void MainFrame::updateChecks() {
 
 void MainFrame::applyTheme() {
     themeApply();
+    imui::theme();
     SetBackgroundColour(wxColourOf(kUi.darkBackground));
     themeWindowDeep(palette_);
     themeWindowDeep(props_);

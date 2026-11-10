@@ -56,6 +56,7 @@ struct Engine {
     void newGraph();
     void resolvePlugins();
     void captureBase();
+    void reloadPluginNodes();
     void refreshPluginLabels();
     std::string initialBlob(const Node& n);
 

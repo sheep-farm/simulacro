@@ -115,9 +115,24 @@ void Engine::refreshPstate(Node& n) {
     if (!b.empty()) n.pstate = b;
 }
 
+// After an undo/redo restores a graph snapshot, plugin nodes must go back to
+// the state captured in the snapshot (params/texts/config). Reapplies the
+// snapshot blob over the live instances; a missing plugin keeps its blob.
+void Engine::reloadPluginNodes() {
+    for (auto& n : g.nodes) {
+        if (n.type != NodeType::PLUGIN || !n.pinst) continue;
+        if (n.pstate.empty()) continue;
+        if (n.pinst->loadFn && !n.pinst->callLoad(n.pinst->handle, n.pstate.c_str()))
+            std::printf("simulacro: plugin %s: state of node %d rejected\n",
+                        n.plugin.c_str(), n.id);
+    }
+}
+
 void Engine::captureBase() { base = g; }
 
 void Engine::checkpoint() {
+    for (auto& n : g.nodes)
+        if (n.type == NodeType::PLUGIN && n.pinst) refreshPstate(n);
     undoStack.push_back(g);
     if (undoStack.size() > 100) undoStack.erase(undoStack.begin());
     redoStack.clear();
@@ -130,6 +145,7 @@ void Engine::undo() {
     g = std::move(undoStack.back());
     undoStack.pop_back();
     g.touch();
+    reloadPluginNodes();
     refreshPluginLabels();
     dirty = true;
 }
@@ -140,6 +156,7 @@ void Engine::redo() {
     g = std::move(redoStack.back());
     redoStack.pop_back();
     g.touch();
+    reloadPluginNodes();
     refreshPluginLabels();
     dirty = true;
 }

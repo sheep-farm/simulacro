@@ -47,6 +47,7 @@ bool SdlCanvas::ensure(int w, int h, int fontPx) {
     if (ren_ && surf_ && w_ == w && h_ == h && font_) return true;
     initSdlOnce();
     if (w_ != w || h_ != h || !surf_) {
+        rebuilt_ = true;
         if (ren_) {
             SDL_DestroyRenderer(ren_);
             ren_ = nullptr;

@@ -13,6 +13,8 @@
 
 #include "engine.h"
 #include "sdlcanvas.h"
+#include "imgui_shell.h"
+#include "imgui.h"
 
 class GraphCanvas : public wxPanel {
 public:
@@ -49,6 +51,7 @@ public:
 
     std::function<void()> onSelectionChanged;
     std::function<void()> onDocumentChanged;
+    std::function<void(int)> onParamEdited;   // widget/or another path changed params
     std::function<void(int)> onOpenScope;
     std::function<void(int)> onEditScript;
     std::function<void(const std::string&)> onMessage;
@@ -58,6 +61,12 @@ private:
         Node node;
         std::string blob;
     };
+
+    // ImGui widgets layer (node canvas only; scopes/maps never touch it)
+    void drawNodeWidgets();            // draws ImGui widgets for the selected node
+    void eventToImGui(const wxMouseEvent& ev); // feed position/button state to ImGui
+    bool imuiConsumesMouse(const wxMouseEvent& ev); // true if a widget owns the event
+    bool widgetHit(const wxPoint& p) const;   // last-frame widget rectangles
 
     void onPaint(wxPaintEvent&);
     void onSize(wxSizeEvent&);
@@ -102,6 +111,7 @@ private:
     void endMove();
     void addNodeContext(int kind, const std::string& plugin, Vec2 world);
     void openNode(int id);
+    bool applyParam(Node* n, int i, double v);
     void invalidateAll();
 
     Engine* e_;
@@ -133,6 +143,8 @@ private:
     std::vector<std::pair<int, Vec2>> moveOrig_;
     int moveGroup_ = -1;
     Vec2 groupOrig_{0, 0};
+    bool widgetUndoActive_ = false;  // ImGui widget gesture (1 undo checkpoint)
+    int widgetNode_ = -1;
 
     // rubber band
     bool rubber_ = false;
@@ -147,6 +159,12 @@ private:
     std::vector<ClipNode> clip_;
     std::vector<Edge> clipEdges_;
     int pasteOffset_ = 0;
+
+    // Screen rectangles of the ImGui widget rail drawn in the previous paint;
+    // used to route mouse events to ImGui even before its own plumbing
+    // updates io.WantCaptureMouse (which lands on the next frame).
+    struct WidgetBox { int x, y, w, h; };
+    std::vector<struct WidgetBox> widgetBoxes_;
 
     bool dragging_ = false;
     bool moved_ = false;

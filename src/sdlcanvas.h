@@ -31,6 +31,10 @@ public:
     int width() const { return w_; }
     int height() const { return h_; }
     bool ok() const { return ren_ != nullptr; }
+    // True if the last ensure() call rebuilt the SDL_Renderer/surface pair
+    // (Dear ImGui must be rebound when this happens).
+    bool rendererRebuilt() const { return rebuilt_; }
+    void clearRendererRebuilt() { rebuilt_ = false; }
 
     // Raw RGBA copy of the last frame (for PNG export).
     bool copyRgba(std::vector<unsigned char>& out) const;
@@ -42,4 +46,5 @@ private:
     TextPainter painter_{};
     int w_ = 0, h_ = 0;
     std::string fontPath_;
+    bool rebuilt_ = false;
 };

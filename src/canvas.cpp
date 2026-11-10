@@ -80,15 +80,65 @@ GraphCanvas::GraphCanvas(wxWindow* parent, Engine* engine)
     Bind(wxEVT_MOUSEWHEEL, &GraphCanvas::onMouseWheel, this);
     Bind(wxEVT_LEFT_DCLICK, &GraphCanvas::onDoubleClick, this);
     Bind(wxEVT_KEY_DOWN, &GraphCanvas::onKeyDown, this);
+    Bind(wxEVT_CHAR, [this](wxKeyEvent& ev) {
+        if (imui::wantsTextInputNow()) {
+            const int uk = ev.GetUnicodeKey();
+            const wxString utf8 = uk > 0 ? wxString((wchar_t)uk) : wxString::FromUTF8(" ");
+            imui::textUtf8(utf8.utf8_str().data());
+            return;
+        }
+        ev.Skip();
+    });
     Bind(wxEVT_ERASE_BACKGROUND, &GraphCanvas::onEraseBackground, this);
     Bind(wxEVT_MOUSE_CAPTURE_LOST, &GraphCanvas::onCaptureLost, this);
+}
+void GraphCanvas::eventToImGui(const wxMouseEvent& ev) {
+    if (!imui::enabled()) return;
+    imui::mouseMove(ev.GetPosition().x, ev.GetPosition().y);
+}
+bool GraphCanvas::imuiConsumesMouse(const wxMouseEvent& ev) {
+    if (!imui::enabled()) return false;
+    eventToImGui(ev);
+    return imui::wantsMouseNow() || widgetHit(ev.GetPosition());
+}
+
+bool GraphCanvas::widgetHit(const wxPoint& p) const {
+    for (const auto& b : widgetBoxes_)
+        if (p.x >= b.x && p.x < b.x + b.w && p.y >= b.y && p.y < b.y + b.h) return true;
+    return false;
+}
+
+// Applies one parameter change through the plugin ABI; engine side stays the
+// same as the property grid path (checkpoint per gesture — see onLeftUp).
+bool GraphCanvas::applyParam(Node* n, int i, double v) {
+    if (!n || !n->pinst) return false;
+    if (!widgetUndoActive_) {
+        e_->checkpoint();
+        widgetUndoActive_ = true;
+    }
+    n->pinst->callSetParam(n->pinst->handle, i, v);
+    e_->refreshPstate(*n);
+    e_->dirty = true;
+    return true;
 }
 
 void GraphCanvas::onPaint(wxPaintEvent&) {
     wxAutoBufferedPaintDC dc(this);
     const wxSize sz = GetClientSize();
     if (bmp_.ensure(sz.x, sz.y)) {
+        if (bmp_.rendererRebuilt()) {       // atlas/renderer pair died with the panel
+            bmp_.clearRendererRebuilt();
+            if (imui::enabled()) imui::renChanged(bmp_.ren());
+        }
         render();
+        if (imui::enabled()) {
+            if (imui::init(bmp_.ren())) {
+                imui::newFrame(sz.x, sz.y);
+                drawNodeWidgets();
+                imui::newFrameEnd();
+                imui::renderFrame(bmp_.ren());
+            }
+        }
         bmp_.present(dc);
     }
 }
@@ -453,6 +503,140 @@ std::string GraphCanvas::oneLine(const std::string& s) const {
     return o;
 }
 
+// ---- ImGui widgets (phase 1: plugins parameters on the selected node) ----
+// Drawn on top of the custom renderer; the UI that moves nodes/wires remains
+// custom. On scope/map views this layer never runs.
+void GraphCanvas::drawNodeWidgets() {
+    if (!imui::enabled() || !ImGui::GetCurrentContext()) return;
+    const int id = singleSelection();
+    const Node* n = id >= 0 ? e_->g.find(id) : nullptr;
+    if (!n) return;
+    if (n->type != NodeType::PLUGIN) return;
+    auto* inst = n->pinst.get();
+    if (!inst) return;
+    const auto* rt = e_->typeOf(*n);
+    if (!rt || rt->params.empty()) return;
+    if (zoom_ < 0.45f) return;   // window tiny: editing is for the properties panel
+
+    char win[40];
+    std::snprintf(win, sizeof win, "##params%d", id);
+    const FRect b = nodeBox(*n);
+    const Vec2 tl = w2s({b.x, b.y + b.h});
+    const float pad = 6.0f, labelW = 60.0f;
+    const float width = 196.0f;
+    const float rowH = ImGui::GetFontSize() + ImGui::GetStyle().ItemSpacing.y * 0.5f;
+    const float height = (float)rt->params.size() * rowH + 2 * pad + 4;
+    widgetBoxes_.clear();
+    widgetBoxes_.push_back({(int)tl.x, (int)tl.y, (int)width, (int)height});
+    ImGui::SetNextWindowPos(ImVec2(tl.x, tl.y));
+    ImGui::SetNextWindowSize(ImVec2(width, height));
+    ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
+        ImGuiWindowFlags_NoBringToFrontOnFocus;
+    if (!ImGui::Begin(win, nullptr, flags)) {
+        ImGui::End();
+        return;
+    }
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 2));
+    for (int i = 0; i < (int)rt->params.size(); ++i) {
+        const auto& pr = rt->params[i];
+        const double cur = inst->callGetParam(inst->handle, i);
+        ImGui::PushID(i);
+        switch (pr.kind) {
+            case NS_PARAM_BOOL: {
+                ImGui::SetCursorPosX(pad);
+                ImGui::TextUnformatted(pr.name.c_str());
+                ImGui::SameLine(pad + labelW);
+                ImGui::PushItemWidth(width - labelW - 2 * pad);
+                bool v = cur != 0.0;
+                if (ImGui::Checkbox("##sw", &v)) {
+                    widgetNode_ = id;
+                    applyParam((Node*)n, i, v ? 1.0 : 0.0);
+                    Refresh(false);
+                }
+                ImGui::PopItemWidth();
+                break;
+            }
+            case NS_PARAM_ENUM: {
+                std::vector<const char*> items;
+                items.reserve(pr.choices.size());
+                for (const auto& s : pr.choices) items.push_back(s.c_str());
+                int idx = (int)std::lround(cur);
+                if (idx < 0 || idx >= (int)items.size()) idx = 0;
+                ImGui::SetCursorPosX(pad);
+                ImGui::TextUnformatted(pr.name.c_str());
+                ImGui::SameLine(pad + labelW);
+                ImGui::PushItemWidth(width - labelW - 2 * pad);
+                if (ImGui::Combo("##combo", &idx, items.data(), (int)items.size())) {
+                    widgetNode_ = id;
+                    applyParam((Node*)n, i, (double)idx);
+                    Refresh(false);
+                }
+                ImGui::PopItemWidth();
+                break;
+            }
+            case NS_PARAM_INT: {
+                int v = (int)std::lround(cur);
+                ImGui::SetCursorPosX(pad);
+                ImGui::TextUnformatted(pr.name.c_str());
+                ImGui::SameLine(pad + labelW);
+                ImGui::PushItemWidth(width - labelW - 2 * pad);
+                const double lo = pr.min, hi = pr.max;
+                const bool rangeOk = std::isfinite(lo) && std::isfinite(hi) &&
+                                     hi > lo && (hi - lo) <= 100000.0;
+                bool changed = false;
+                if (rangeOk) {
+                    changed = ImGui::SliderInt("##int", &v, (int)lo, (int)hi);
+                } else {
+                    changed = ImGui::InputInt("##int", &v, 1, 100);
+                    if (std::isfinite(lo)) v = std::max(v, (int)lo);
+                    if (std::isfinite(hi)) v = std::min(v, (int)hi);
+                }
+                if (changed) {
+                    widgetNode_ = id;
+                    applyParam((Node*)n, i, (double)v);
+                    Refresh(false);
+                }
+                ImGui::PopItemWidth();
+                break;
+            }
+            default: {
+                ImGui::SetCursorPosX(pad);
+                ImGui::TextUnformatted(pr.name.c_str());
+                ImGui::SameLine(pad + labelW);
+                ImGui::PushItemWidth(width - labelW - 2 * pad);
+                const double lo = pr.min, hi = pr.max;
+                const bool rangeOk = std::isfinite(lo) && std::isfinite(hi) &&
+                                     hi > lo && (hi - lo) <= 1e6;
+                bool changed = false;
+                double out = cur;
+                if (rangeOk) {
+                    float f = (float)cur;
+                    changed = ImGui::SliderFloat("##f", &f, (float)lo, (float)hi, "%.4f");
+                    out = (double)f;
+                } else {
+                    ImGui::InputDouble("##num", &out, 0.0, 0.0, "%.6g");
+                    changed = ImGui::IsItemDeactivatedAfterEdit();
+                    if (std::isfinite(lo)) out = std::max(out, lo);
+                    if (std::isfinite(hi)) out = std::min(out, hi);
+                }
+                if (changed) {
+                    widgetNode_ = id;
+                    applyParam((Node*)n, i, out);
+                    Refresh(false);
+                }
+                ImGui::PopItemWidth();
+                break;
+            }
+        }
+        ImGui::PopID();
+    }
+    ImGui::PopStyleVar();
+    ImGui::End();
+}
+
 std::string GraphCanvas::portLabel(const Node& n, int port, bool input) const {
     if (n.pinst) {
         char* s = input ? n.pinst->callPortLabelIn(n.pinst->handle, port)
@@ -535,6 +719,9 @@ int GraphCanvas::groupBodyAt(Vec2 world) const {
 }
 
 void GraphCanvas::onLeftDown(wxMouseEvent& ev) {
+    eventToImGui(ev);
+    imui::mouseButton(0, true);
+    if (imui::wantsMouseNow() || widgetHit(ev.GetPosition())) { Refresh(false); return; }
     if (dragging_ || rubber_ || panning_) return;
     SetFocus();
     if (!HasCapture()) CaptureMouse();
@@ -679,6 +866,19 @@ void GraphCanvas::connectPending(Vec2 world) {
 }
 
 void GraphCanvas::onLeftUp(wxMouseEvent& ev) {
+    if (imui::enabled()) {
+        eventToImGui(ev);
+        imui::mouseButton(0, false);
+    }
+    if (widgetUndoActive_) {
+        widgetUndoActive_ = false;
+        const int id = widgetNode_;
+        widgetNode_ = -1;
+        if (HasCapture()) ReleaseMouse();
+        Refresh(false);
+        if (id >= 0 && onParamEdited) onParamEdited(id);
+        return;  // gesture ended on a widget: the canvas did not start a drag
+    }
     if (!dragging_) return;
     dragging_ = false;
     mouse_ = ev.GetPosition();
@@ -706,8 +906,15 @@ void GraphCanvas::onLeftUp(wxMouseEvent& ev) {
 }
 
 void GraphCanvas::onMotion(wxMouseEvent& ev) {
+    eventToImGui(ev);
     mouse_ = ev.GetPosition();
     mouseWorld_ = s2w({(float)mouse_.x, (float)mouse_.y});
+    if ((imui::wantsMouseNow() || widgetHit(mouse_)) &&
+        !dragging_ && !rubber_ && !moving_ && !panning_) {
+        Refresh(false);
+        ev.Skip();
+        return;
+    }
     if (panning_) {
         const wxPoint d = mouse_ - panStart_;
         camX_ = panCamX_ - d.x / zoom_;
@@ -733,6 +940,9 @@ void GraphCanvas::onMotion(wxMouseEvent& ev) {
 }
 
 void GraphCanvas::onRightDown(wxMouseEvent& ev) {
+    eventToImGui(ev);
+    imui::mouseButton(1, true);
+    if (imui::wantsMouseNow() || widgetHit(ev.GetPosition())) { Refresh(false); return; }
     SetFocus();
     mouse_ = ev.GetPosition();
     mouseWorld_ = s2w({(float)mouse_.x, (float)mouse_.y});
@@ -802,6 +1012,9 @@ void GraphCanvas::addNodeContext(int kind, const std::string& plugin, Vec2 world
 }
 
 void GraphCanvas::onMiddleDown(wxMouseEvent& ev) {
+    eventToImGui(ev);
+    imui::mouseButton(2, true);
+    if (imui::wantsMouseNow() || widgetHit(ev.GetPosition())) { Refresh(false); return; }
     if (HasCapture()) return;
     panning_ = true;
     panStart_ = ev.GetPosition();
@@ -810,12 +1023,21 @@ void GraphCanvas::onMiddleDown(wxMouseEvent& ev) {
     CaptureMouse();
 }
 
-void GraphCanvas::onMiddleUp(wxMouseEvent&) {
+void GraphCanvas::onMiddleUp(wxMouseEvent& ev) {
+    if (imui::enabled()) {
+        eventToImGui(ev);
+        imui::mouseButton(2, false);
+    }
     panning_ = false;
     if (HasCapture()) ReleaseMouse();
 }
 
 void GraphCanvas::onMouseWheel(wxMouseEvent& ev) {
+    eventToImGui(ev);
+    imui::mouseWheel((float)ev.GetWheelAxis() == 0 ? 0.0f
+                                                  : (float)ev.GetWheelDelta() / 120.0f,
+                     (float)ev.GetWheelRotation() / 120.0f);
+    if (imui::wantsMouseNow() || widgetHit(ev.GetPosition())) return;
     const int rot = ev.GetWheelRotation();
     if (!rot) return;
     const float factor = std::pow(1.12f, rot / 120.0f);

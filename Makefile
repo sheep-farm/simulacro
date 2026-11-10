@@ -9,12 +9,15 @@
 # under plugins/ — the tree is self-contained and does not require the former
 # nodesim checkout.
 
+.DEFAULT_GOAL := all
+
 CXX      ?= g++
 WX_CONFIG ?= wx-config
 
 CXXFLAGS = -std=c++17 -O2 -Wall -Wextra -Wno-unused-parameter -MMD -MP \
            -ffile-prefix-map=$(CURDIR)=. \
            -Isrc -Isrc/core -Isrc/sdk \
+           -I$(THIRDPARTY) -I$(THIRDPARTY)/backends \
            $(EXTRA_CXXFLAGS) \
            $(shell $(WX_CONFIG) --cxxflags) $(shell sdl2-config --cflags)
 LDLIBS   = $(shell $(WX_CONFIG) --libs std,aui,propgrid) \
@@ -24,13 +27,29 @@ SRC = src
 OBJ = build
 BIN = bin
 PLUGDIR = plugins
+THIRDPARTY = third_party/imgui
 VERSION := 0.1.0
 
 SRC_CPP := $(shell find $(SRC) -name '*.cpp' | sort)
 OBJS = $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(SRC_CPP))
 
-$(BIN)/simulacro: $(OBJS) | $(BIN)
-	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(LDLIBS)
+IMGUI_CPP := $(wildcard $(THIRDPARTY)/imgui.cpp $(THIRDPARTY)/imgui_draw.cpp \
+              $(THIRDPARTY)/imgui_tables.cpp $(THIRDPARTY)/imgui_widgets.cpp)
+IMGUI_BACKEND_CPP := $(THIRDPARTY)/backends/imgui_impl_sdlrenderer2.cpp
+IMGUI_OBJS = $(OBJ)/imgui/imgui.o $(OBJ)/imgui/imgui_draw.o \
+             $(OBJ)/imgui/imgui_tables.o $(OBJ)/imgui/imgui_widgets.o \
+             $(OBJ)/imgui/imgui_backend.o
+
+$(OBJ)/imgui/imgui_backend.o: $(THIRDPARTY)/backends/imgui_impl_sdlrenderer2.cpp | $(OBJ)
+	@mkdir -p $(dir $@)
+	$(CXX) $(CXXFLAGS) -I$(THIRDPARTY) -I$(THIRDPARTY)/backends -c -o $@ $<
+
+$(OBJ)/imgui/%.o: $(THIRDPARTY)/%.cpp | $(OBJ)
+	@mkdir -p $(OBJ)/imgui
+	$(CXX) $(CXXFLAGS) -I$(THIRDPARTY) -I$(THIRDPARTY)/backends -c -o $@ $<
+
+$(BIN)/simulacro: $(OBJS) $(IMGUI_OBJS) | $(BIN)
+	$(CXX) $(CXXFLAGS) -o $@ $(OBJS) $(IMGUI_OBJS) $(LDLIBS)
 
 $(OBJ)/%.o: $(SRC)/%.cpp | $(OBJ)
 	@mkdir -p $(dir $@)
@@ -65,6 +84,9 @@ clean:
 distclean: clean
 	rm -f $(PLUGDIR)/*.d
 
--include $(OBJS:.o=.d)
+-include $(OBJS:.o=.d) $(IMGUI_OBJS:.o=.d)
 
-.PHONY: plugins test run clean distclean
+.PHONY: all
+all: $(BIN)/simulacro plugins
+
+.PHONY: all plugins test run clean distclean

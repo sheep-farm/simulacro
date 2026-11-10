@@ -12,6 +12,12 @@ wx panels:
   existing files and plugins keep working as before;
 - headless runner (`--run`), port traces and numeric regression through
   `tests/golden/`;
+- **in-canvas parameter widgets (Dear ImGui)**: the selected plugin node
+  shows a boolean switch, number slider/input and enum combo right below the
+  node, rendered by the same SDL software surface; the property grid stays
+  the canonical editor and each gesture yields a single undo checkpoint.
+  `SIMULACRO_IMGUI=0` (or `off`) disables the layer; `SIMULACRO_IMGUI_DEBUG=1`
+  logs per-command render errors. Scope charts and maps never touch ImGui;
 - plugin discovery folder `~/.local/share/nodesim/plugins` and the `NODESIM_*`
   environment variables are compatibility surfaces: do not rename them.
 
@@ -108,6 +114,8 @@ src/core/      engine (graph, steps, expressions, scopes, maps, i18n key tables,
 src/sdk/       public plugin ABI header (ABI 14)
 src/engine.*   headless model: graph, clock, scopes, undo, files
 src/canvas.*   wxPanel node canvas (SDL off-screen renderer)
+src/imgui_shell.* Dear ImGui shim: context/fonts/theme/events (fase 1)
+third_party/imgui vendored (v1.93.0, SDL renderer backend)
 src/properties.* wxPropertyGrid editor
 src/palette.*  searchable node/plugin tree
 src/scopeview.* Scope notebook and scope pages (SDL off-screen renderer)

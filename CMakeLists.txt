@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+set(VENDORED_IMGUI "${CMAKE_CURRENT_SOURCE_DIR}/third_party/imgui")
+
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "" FORCE)
 endif()
@@ -22,12 +24,19 @@ pkg_check_modules(SDL2TTF REQUIRED IMPORTED_TARGET SDL2_ttf)
 file(GLOB_RECURSE CORE_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/core/*.cpp")
 file(GLOB UI_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
+file(GLOB IMGUI_SOURCES "${VENDORED_IMGUI}/imgui.cpp"
+    "${VENDORED_IMGUI}/imgui_draw.cpp"
+    "${VENDORED_IMGUI}/imgui_tables.cpp"
+    "${VENDORED_IMGUI}/imgui_widgets.cpp"
+    "${VENDORED_IMGUI}/backends/imgui_impl_sdlrenderer2.cpp")
 
-add_executable(simulacro ${CORE_SOURCES} ${UI_SOURCES})
+add_executable(simulacro ${CORE_SOURCES} ${UI_SOURCES} ${IMGUI_SOURCES})
 target_include_directories(simulacro PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/sdk")
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/sdk"
+    "${VENDORED_IMGUI}"
+    "${VENDORED_IMGUI}/backends")
 target_link_libraries(simulacro PRIVATE
     ${wxWidgets_LIBRARIES}
     PkgConfig::SDL2
