@@ -103,6 +103,16 @@ Design rules:
   the fase-1 rail; `off` disables in-canvas editing. `nodeui::mode()` is read
   once at startup: switching modes needs a restart, by design.
 
+- **Decision (keep-warm, do not flip silently):** the canvas *property
+  popup* over nodes is what fase 1..3 Hid behind
+  `#if defined(SIMULACRO_NODE_UI)` (compile-time, default **off**) — by
+  explicit request ("a ideia tem potencial, mas não por agora"; keep the
+  code, gate the build). The `nodesim_plugin_ui()` *declaration* is a
+  separate, active contract in every build; only the *host renderer* that
+  paints these widgets on the canvas is compile-gated. The fase 4 window
+  chrome (`SIMULACRO_NODE_WINDOW`) stays default-on and does not depend on
+  the popup flag.
+
 - **Ports do not move:** the strip is an overlay on the existing node box;
   `nodeBox/nodeWidth/nodeHeight`, wires and port anchors keep the engine
   geometry. When a plugin declares in-node widgets (fase 3), the host

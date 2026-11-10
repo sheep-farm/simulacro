@@ -610,33 +610,36 @@ void GraphCanvas::drawPendingIm() {
             d2 = l > 0.001f ? Vec2{from.x / l, from.y / l} : Vec2{-1, 0};
         }
     }
+    // same cubic as core wirePoint(): u = 1 - t
+    const float off = std::max(30.0f, std::hypot(p2.x - p1.x, p2.y - p1.y) * 0.5f);
+    Vec2 u1 = d1, u2 = d2;
+    {
+        float l1 = std::hypot(d1.x, d1.y), l2 = std::hypot(d2.x, d2.y);
+        if (l1 > 0.001f) u1 = {d1.x / l1, d1.y / l1};
+        if (l2 > 0.001f) u2 = {d2.x / l2, d2.y / l2};
+    }
+    auto point = [&](float t) {
+        const float u = 1.0f - t;
+        return Vec2{
+            u * u * u * p1.x + 3 * u * u * t * (p1.x + u1.x * off) +
+                3 * u * t * t * (p2.x - u2.x * off) + t * t * t * p2.x,
+            u * u * u * p1.y + 3 * u * u * t * (p1.y + u1.y * off) +
+                3 * u * t * t * (p2.y - u2.y * off) + t * t * t * p2.y,
+        };
+    };
+    const ImU32 color =
+        IM_COL32(kUi.highlight.r, kUi.highlight.g, kUi.highlight.b, 255);
     ImDrawList* dl = ImGui::GetForegroundDrawList();
-    if (curve_ && (std::fabs(d1.x) > 0.001f || std::fabs(d2.x) > 0.001f)) {
-        // ~ the core cubic bezier (wirePoint with off = the same formula)
-        const float off = std::max(30.0f, std::hypot(p2.x - p1.x, p2.y - p1.y) * 0.5f);
-        Vec2 u1 = vnorm(d1), u2 = vnorm(d2);
+    if (curve_) {
         const int N = 24;
-        for (int i = 0; i < N; ++i) {
-            const float u = (float)i / N, t = 1.0f - u;
-            Vec2 a{
-                t * t * t * p1.x + 3 * t * t * u * (p1.x + u1.x * off) +
-                    3 * t * u * u * (p2.x - u2.x * off) + u * u * u * p2.x,
-                t * t * t * p1.y + 3 * t * t * u * (p1.y + u1.y * off) +
-                    3 * t * u * u * (p2.y - u2.y * off) + u * u * u * p2.y,
-            };
-            const float t2 = 1.0f - (float)(i + 1) / N, u2b = (float)(i + 1) / N;
-            Vec2 bq{
-                t2 * t2 * t2 * p1.x + 3 * t2 * t2 * u2b * (p1.x + u1.x * off) +
-                    3 * t2 * u2b * u2b * (p2.x - u2.x * off) + u2b * u2b * u2b * p2.x,
-                t2 * t2 * t2 * p1.y + 3 * t2 * t2 * u2b * (p1.y + u1.y * off) +
-                    3 * t2 * u2b * u2b * (p2.y - u2.y * off) + u2b * u2b * u2b * p2.y,
-            };
-            dl->AddLine(ImVec2(a.x, a.y), ImVec2(bq.x, bq.y),
-                        IM_COL32(kUi.highlight.r, kUi.highlight.g, kUi.highlight.b, 255), 2.0f);
+        Vec2 prev = p1;
+        for (int i = 1; i <= N; ++i) {
+            Vec2 q = point((float)i / N);
+            dl->AddLine(ImVec2(prev.x, prev.y), ImVec2(q.x, q.y), color, 2.0f);
+            prev = q;
         }
     } else {
-        dl->AddLine(ImVec2(p1.x, p1.y), ImVec2(p2.x, p2.y),
-                    IM_COL32(kUi.highlight.r, kUi.highlight.g, kUi.highlight.b, 255), 2.0f);
+        dl->AddLine(ImVec2(p1.x, p1.y), ImVec2(p2.x, p2.y), color, 2.0f);
     }
 }
 #endif // SIMULACRO_NODE_WINDOW

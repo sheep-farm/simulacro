@@ -25,6 +25,18 @@ Currently adopted extensions (all additive; no `.nodesim` change):
 
 ## The declarative UI (`nodesim_plugin_ui`)
 
+Contract split today (write it down to avoid confusion):
+
+- The **declaration** (`nodesim_plugin_ui()`) is active in every build: a
+  plugin may ship a UI table at any time and `.so` remains valid.
+- The **canvas rendering** of that UI (the fase 1..3 in-node property popup
+  over the node) is what is hidden behind `SIMULACRO_NODE_UI` (compile-time,
+  default **off**) after the community decided the canvas popup "has
+  potential but not for now"; keep the code, gate the build.
+- When the flag is off the property grid (`wxPropertyGrid`) stays the
+  canonical editor and nothing else changes for the plugin.
+
+
 The host (canvas) renders parameter controls *directly on the node drawing*.
 Two levels exist, and both are host-side; the plugin never draws them:
 

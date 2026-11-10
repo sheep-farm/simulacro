@@ -27,14 +27,17 @@ wx panels:
   window chrome (type-colored title bar, title text, hover/selection outline)
   and the pending wire is drawn on top of nodes while connecting. In build
   defaults: compiled in (`SIMULACRO_NODE_WINDOW=1`);
-- **plugin-authored layout (fase 3, hidden by default)**: a type can declare its in-node widget
+- **plugin-authored layout (fase 3)**: a type can declare its in-node widget
   list with the optional `nodesim_plugin_ui()` symbol (`NS_PLUGIN_UI`), bound
   to `params[]`/`texts[]` (sliders, switches, enums, inputs, LEDs, labels).
-  The host renders it, reserves room in the node body so ports do not move,
-  and keeps the generic editor for plugins without the symbol. Built-ins
-  already using it: `led` (RGB sliders) and `pgain` (gain slider). Details:
-  `docs/abi.md`. Examples: `examples/painel-innode.nodesim`
-  (script → pgain → LED, curated for `inner` at zoom ~1:1);
+  The declaration itself is an ABI-additive contract and is active in every
+  build — the *canvas rendering* of these controls (the fase 1..3 property
+  popup in the node) is the part hidden behind `SIMULACRO_NODE_UI`
+  (compile-time, default off). See docs/architecture.md for the boundary.
+  Built-ins already declaring it: `led` (RGB sliders) and `pgain` (gain
+  slider). Details: `docs/abi.md`.
+  `examples/painel-innode.nodesim` (script → pgain → LED) exercises both
+  layers when the flag is on;
 - plugin discovery folder `~/.local/share/nodesim/plugins` and the `NODESIM_*`
   environment variables are compatibility surfaces: do not rename them.
 
