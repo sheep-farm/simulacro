@@ -165,6 +165,16 @@ void GraphCanvas::onCaptureLost(wxMouseCaptureLostEvent&) {
     moving_ = false;
     rubber_ = false;
     panning_ = false;
+    if (actNode_ >= 0 && actParam_ >= 0) { // solto o botão se perdermos captura
+        if (Node* nRel = e_->g.find(actNode_)) {
+            const Engine::ClickAct act = e_->clickAct(*nRel);
+            if (act.kind == NS_ACT_HOLD) e_->runClickAct(*nRel, act, false);
+            if (onParamEdited) onParamEdited(actNode_);
+        }
+        actNode_ = -1;
+        actParam_ = -1;
+        Refresh(false);
+    }
 }
 
 void GraphCanvas::render() {
@@ -508,8 +518,12 @@ void GraphCanvas::onLeftUp(wxMouseEvent& ev) {
         imui::mouseButton(0, false);
     }
 #endif
-    // fim da pressão do controle no canvas (NS_PLUGIN_ACTS / HASH_HOLD)
+    // fim da pressão do controle no canvas (NS_PLUGIN_ACTS / HOLD):
+    // encerra TAMBÉM o estado de arrasto aberto no down (dragging_=true),
+    // senão o PRÓXIMO clique no botão cai fora ("if (dragging_...) return")
     if (actNode_ >= 0 && actParam_ >= 0) {
+        dragging_ = false;
+        if (HasCapture()) ReleaseMouse();   // captura aberta no down
         if (Node* nRel = e_->g.find(actNode_)) {
             const Engine::ClickAct act = e_->clickAct(*nRel);
             if (act.kind == NS_ACT_HOLD) e_->runClickAct(*nRel, act, false);
