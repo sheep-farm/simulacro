@@ -1,0 +1,18 @@
+# build
+bin/
+build/
+*.o
+*.d
+
+# plugins: fontes versionados (plugins/*.cpp, common.h);
+# os .so são artefatos de build
+plugins/*.so
+
+# teste: arquivo temporário criado por tests/run.sh
+.golden.tmp
+tests/golden/*.tmp
+
+# editor/OS
+*.bak
+*.swp
+*~

@@ -1,0 +1,16 @@
+nodesim 9
+node 0 1 140 300 0 "" "rng" "semente=5 dist=1" 2 1 0 2 "choques" ""
+node 1 0 420 180 0 "x + 0.3*in(0)" "" "" 1 1 0 2 "estado" ""
+node 2 0 660 220 0 "in(0) + in(1)" "" "" 1 2 0 2 "y" ""
+node 3 1 940 220 0 "" "kalman" "modelo=0 q=0.09 qs=0.01 r=1 p0=1 taxa=0" 5 1 0 2 "filtro" ""
+node 4 2 1260 120 0 "" "" "" 0 3 0 2 "série" "tipo=linha, janela=12"
+node 5 2 1260 460 0 "" "" "" 0 2 0 2 "diagnóstico" "tipo=linha, janela=12"
+edge 0 0 1 0
+edge 1 0 2 0
+edge 0 1 2 1
+edge 2 0 3 0
+edge 1 0 4 0
+edge 2 0 4 1
+edge 3 0 4 2
+edge 3 2 5 0
+edge 3 3 5 1

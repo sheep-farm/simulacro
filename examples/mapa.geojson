@@ -1,0 +1,37 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "id": "1", "nome": "Noroeste" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-60, -10], [-50, -10], [-50, 0], [-60, 0], [-60, -10]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "2", "nome": "Nordeste" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-50, -10], [-40, -10], [-40, 0], [-50, 0], [-50, -10]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "3", "nome": "Sudoeste" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-60, -20], [-50, -20], [-50, -10], [-60, -10], [-60, -20]]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "4", "nome": "Sudeste" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[-50, -20], [-40, -20], [-40, -10], [-50, -10], [-50, -20]]]
+      }
+    }
+  ]
+}

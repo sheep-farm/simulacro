@@ -1,0 +1,140 @@
+# simulacro
+
+An editor and simulator for node graphs, self-contained: wxWidgets (native
+GTK3 chrome) around the engine that started its life as **nodesim**, now
+embedded in this tree (`src/core/`, `plugins/*.cpp`). Keep this interface
+native: wxWidgets owns the window, docks and dialogs; SDL is kept only where
+it earns its keep, as the two custom raster views, off-screen and blitted into
+wx panels:
+
+- engine under `src/core/` and the built-in plugin sources under `plugins/`;
+- file format `.nodesim` (format 10) and plugin **ABI 14** unchanged, so
+  existing files and plugins keep working as before;
+- headless runner (`--run`), port traces and numeric regression through
+  `tests/golden/`;
+- plugin discovery folder `~/.local/share/nodesim/plugins` and the `NODESIM_*`
+  environment variables are compatibility surfaces: do not rename them.
+
+Historical note: this project absorbed the former `nodesim` program (engine,
+plugins, examples and tests). The old tree is archived; nothing here reads
+from it. The public contracts listed above are frozen by tests, not by the
+old repository's existence.
+
+The native shell:
+- native window, menus, toolbar, status bar and dialogs (GTK3);
+- dockable panes via `wxAuiManager` (nodes palette, properties, scopes);
+- a real property editor (`wxPropertyGrid`) for node, script, plugin and
+  scope settings;
+- SDL for the node canvas and the scope charts.
+
+## Requirements
+
+- C++17 compiler
+- wxWidgets 3.2 with `aui` and `propgrid` (`wx-config --libs std,aui,propgrid`)
+- SDL2 and SDL2_ttf
+- A TrueType monospace font (Liberation/Noto/DejaVu are probed)
+
+On Arch/Omarchy:
+
+```sh
+sudo pacman -S wxwidgets-gtk3 sdl2 sdl2_ttf
+```
+
+## Build
+
+```sh
+make            # app at bin/simulacro
+make plugins    # ABI 14 plugins at plugins/*.so
+```
+
+Plugin sources live in `plugins/*.cpp` (next to `plugins/common.h`, the
+helper for built-ins) and compile against the SDK that ships in
+`src/sdk/nodesim_plugin.h`. Third-party plugins only need that header: they
+do not include `common.h`.
+
+## Run
+
+```sh
+./bin/simulacro                          # empty graph
+./bin/simulacro examples/ar1.nodesim
+./bin/simulacro --open-scopes FILE       # open every Scope page
+./bin/simulacro --run FILE --steps 600   # headless CSV trace
+./bin/simulacro --run FILE --summary     # final values only
+```
+
+`--run` prints one CSV column per Scope channel. Plugin discovery follows the
+historical order: `NODESIM_PLUGIN_PATH`, `./plugins`,
+`<prefix>/share/nodesim/plugins`, `~/.local/share/nodesim/plugins`, then the
+XDG system data directories.
+
+## Features
+
+- Open, edit and save `.nodesim` files (format 10, ABI 14).
+- Script nodes with a native multi-line editor, live compile feedback and the
+  list of input sources.
+- Plugin nodes: parameters, text fields, ports, custom drawing and state.
+- Scope nodes: line/XY/bars/histogram/FFT/map charts, frozen history, SVG and
+  PNG export. Maps support pan/zoom and fit (double-click).
+- Visual groups (`Ctrl+G` / `Ctrl+Shift+G`).
+- Undo/redo, copy/paste/duplicate, pan/zoom, wire selection, snap-free layout.
+- Simulation transport: start/pause, step, reset, rate, stop-after, cycle
+  convergence and discrete events.
+- Omarchy theme bridge: the native chrome follows `colors.toml` and is polled
+  while the app runs. UI language can be switched at runtime (English /
+  Português do Brasil).
+- Headless runner for batch traces.
+
+## Keyboard
+
+| Key | Action |
+| --- | --- |
+| Space | start/pause (canvas focus) |
+| F6 / F5 | step / reset |
+| V / G / C | values / grid / curved wires |
+| O | open the selected Scope |
+| Ctrl+Z, Ctrl+Y | undo / redo |
+| Ctrl+C, Ctrl+V, Ctrl+D | copy / paste / duplicate |
+| Del, Ctrl+A | delete selection / select all |
+| Ctrl+G, Ctrl+Shift+G | group / ungroup |
+| Ctrl+K | focus the node search |
+| Ctrl+N/O/S, Ctrl+Shift+S | new / open / save / save as |
+| F1 | shortcut help |
+
+## Layout
+
+```
+src/core/      engine (graph, steps, expressions, scopes, maps, i18n key tables,
+               theme, exporters)
+src/sdk/       public plugin ABI header (ABI 14)
+src/engine.*   headless model: graph, clock, scopes, undo, files
+src/canvas.*   wxPanel node canvas (SDL off-screen renderer)
+src/properties.* wxPropertyGrid editor
+src/palette.*  searchable node/plugin tree
+src/scopeview.* Scope notebook and scope pages (SDL off-screen renderer)
+src/scriptdlg.* native script editor
+src/app.*      MainFrame, menus, docks, actions
+src/main.cpp   GUI entry point and --run runner
+plugins/       built-in plugin sources + common.h; build targets: plugins/*.so
+examples/      sample graphs, GeoJSON overlays and manifests
+tests/         run.sh smoke suite and tests/golden/*.csv numeric traces
+```
+
+See [docs/architecture.md](docs/architecture.md) for the layering rules.
+
+## Regression discipline
+
+The engine is deterministic: run thrice, get the same CSV. The smoke suite
+compares `examples/ar1.nodesim` and `examples/contador_logico.nodesim` traces
+against `tests/golden/*.csv`. Only regenerate the golden files when a change
+in behavior is intended, and always with a note in the change description:
+
+```sh
+./bin/simulacro --run examples/ar1.nodesim --steps 60 > tests/golden/ar1.csv
+./bin/simulacro --run examples/contador_logico.nodesim --steps 60 \
+    > tests/golden/contador_logico.csv
+```
+
+## License
+
+GPL-3.0-or-later. The engine and plugin sources started in the archived
+`nodesim` project, by the same author; both trees remain GPL-3.0-or-later.

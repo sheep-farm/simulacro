@@ -1,0 +1,23 @@
+nodesim 9
+node 0 1 140 300 0 "" "rng" "semente=7 dist=1" 2 1 0 2 "choque" ""
+node 1 0 430 140 0 "0.85*x + in(0)" "" "" 1 1 0 2 "y" ""
+node 2 0 430 430 0 "0.5*x + 0.7*in(0) + 0.7*in(1)" "" "" 1 2 0 2 "z" ""
+node 3 1 760 40 0 "" "stats" "tipo=0 janela=30" 1 2 0 2 "média y" ""
+node 4 1 760 190 0 "" "stats" "tipo=2 janela=30" 1 2 0 2 "desvio y" ""
+node 5 1 760 400 0 "" "stats" "tipo=7 janela=60" 1 2 0 2 "correlação" ""
+node 6 1 760 550 0 "" "stats" "tipo=8 janela=60" 1 2 0 2 "beta z~y" ""
+node 7 2 1120 140 0 "" "" "" 0 2 0 2 "séries" "tipo=linha, janela=12"
+node 8 2 1120 460 0 "" "" "" 0 2 0 2 "estatísticas" "tipo=linha, janela=12"
+edge 0 0 1 0
+edge 0 0 2 0
+edge 0 1 2 1
+edge 1 0 3 0
+edge 1 0 4 0
+edge 1 0 5 0
+edge 2 0 5 1
+edge 1 0 6 0
+edge 2 0 6 1
+edge 1 0 7 0
+edge 2 0 7 1
+edge 5 0 8 0
+edge 6 0 8 1

@@ -1,0 +1,17 @@
+nodesim 9
+node 0 1 140 120 0 "" "rng" "semente=17 dist=1 ampl=0.3" 1 1 0 2 "ruído" ""
+node 1 0 140 300 0 "100 + 0.5*t" "" "" 1 1 0 2 "tendência" ""
+node 2 0 140 480 0 "2*sin(18.85*t)" "" "" 1 1 0 2 "ciclo" ""
+node 3 0 430 300 0 "in(0) + in(1) + in(2)" "" "" 1 3 0 2 "y" ""
+node 4 1 700 300 0 "" "hp" "lambda=50000 janela=240 taxa=0" 3 1 0 2 "HP" ""
+node 5 2 1020 120 0 "" "" "" 0 3 0 2 "série" "tipo=linha, janela=4"
+node 6 2 1020 460 0 "" "" "" 0 2 0 2 "ciclo" "tipo=linha, janela=4"
+edge 0 0 3 2
+edge 1 0 3 0
+edge 2 0 3 1
+edge 3 0 4 0
+edge 1 0 5 0
+edge 4 0 5 1
+edge 2 0 5 2
+edge 2 0 6 0
+edge 4 1 6 1

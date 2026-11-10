@@ -1,0 +1,29 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "id": "r1", "nome": "Eixo Norte" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[-58, -5], [-54, -4], [-50, -2], [-44, 0]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "r2", "nome": "Eixo Sul" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[-57, -16], [-52, -14], [-46, -11]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "id": "r3", "nome": "Ligação Central" },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[-55, -5], [-54, -9], [-52, -14]]
+      }
+    }
+  ]
+}

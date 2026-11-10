@@ -1,0 +1,4 @@
+nodesim 9
+node 0 0 217 250 0 "vec(10,20,30,40)" "" "" 1 1 0 2 "valores" ""
+node 1 2 217 314 0 "" "" "v 1\nview -50.367184611430041 -15.280287776478872 22.873316476160657\ntool 0\n" 0 1 0 2 "Mapa" "tipo=mapa, arquivo=/home/flavio/Work/tries/rodovias_federais_brasil.geojson, idcampo=id, rotulo=nome, vauto=1, sobrepor=/home/flavio/Work/tries/geodata-br-states/geojson/br_states.json|/home/flavio/Work/tries/rodovias_federais_brasil.geojson"
+edge 0 0 1 0

@@ -1,0 +1,21 @@
+nodesim 9
+node 0 1 140 250 0 "" "csv" "\"/home/flavio/econometrics/data/CSV.csv\" col=0 rate=20 loop=1 header=1 watch=1 modo=1 sep=, colunas=\"open,high,low,close\"" 1 1 0 2 "CSV (matriz)" ""
+node 1 0 430 140 0 "col(sval(0), 3)" "" "" 1 1 0 2 "close" ""
+node 2 1 700 140 0 "" "hp" "lambda=129600 janela=120 taxa=0 modo=1 coluna=0" 3 1 0 2 "HP lote" ""
+node 3 2 1030 110 0 "" "" "" 0 2 0 2 "preço e tendência" "tipo=linha, janela=12"
+node 4 2 1030 420 0 "" "" "" 0 1 0 2 "ciclo" "tipo=linha, janela=12"
+node 5 0 700 420 0 "len(sval(0)), mean(sval(0))" "" "" 2 1 0 2 "resumo" ""
+node 6 1 700 640 0 "" "ols" "modo=1 ycol=3" 5 1 0 2 "OLS lote (close)" ""
+node 7 0 1030 640 0 "at(sval(0),0), at(sval(0),1), at(sval(0),2), at(sval(0),3), at(sval(1),1), sval(2), sval(3)" "" "" 7 5 0 2 "OLS close ~ open+high+low" ""
+edge 0 0 1 0
+edge 1 0 2 0
+edge 1 0 3 0
+edge 2 0 3 1
+edge 2 1 4 0
+edge 2 0 5 0
+edge 0 0 6 0
+edge 6 0 7 0
+edge 6 1 7 1
+edge 6 2 7 2
+edge 6 3 7 3
+edge 6 4 7 4

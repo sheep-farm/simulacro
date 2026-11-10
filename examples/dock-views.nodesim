@@ -1,0 +1,7 @@
+nodesim 10
+node 0 0 240 220 0 "sin(2*t)" "" "" 1 1 0 2 "sine" ""
+node 1 2 600 220 0 "" "" "" 0 1 0 2 "sine scope" "type=line, window=8, grid=1, legend=1"
+node 2 0 240 500 0 "vec(10,20,30,40)" "" "" 1 1 0 2 "map values" ""
+node 3 2 600 500 0 "" "" "" 0 1 0 2 "map example" "type=map, file=mapa.geojson, idfield=id, label=nome, valueauto=1, legend=1"
+edge 0 0 1 0
+edge 2 0 3 0
