@@ -1,0 +1,8 @@
+nodesim 10
+# abertura de exemplo: widgets internos do nó (SIMULACRO_NODE_UI=inner)
+# LED: script senoidal -> ganho -> LED (r/g/b) | usa plugins built-in
+node 0 0 340 -60 0 "sin(0.12*t) * 0.6 + 0.4" "" "" 0 1 0 2 "fase" ""
+node 1 1 560 -60 0 "" "pgain" "1.4" 1 1 0 2 "ganho" ""
+node 2 1 770 40 0 "" "led" "r=210, g=110, b=40" 1 1 0 2 "led" ""
+edge 0 0 1 0
+edge 1 0 2 0

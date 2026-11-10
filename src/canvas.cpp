@@ -96,12 +96,6 @@ void GraphCanvas::eventToImGui(const wxMouseEvent& ev) {
     if (!imui::enabled()) return;
     imui::mouseMove(ev.GetPosition().x, ev.GetPosition().y);
 }
-bool GraphCanvas::imuiConsumesMouse(const wxMouseEvent& ev) {
-    if (!imui::enabled()) return false;
-    eventToImGui(ev);
-    return imui::wantsMouseNow() || widgetHit(ev.GetPosition());
-}
-
 bool GraphCanvas::widgetHit(const wxPoint& p) const {
     for (const auto& b : widgetBoxes_)
         if (p.x >= b.x && p.x < b.x + b.w && p.y >= b.y && p.y < b.y + b.h) return true;
@@ -503,11 +497,16 @@ std::string GraphCanvas::oneLine(const std::string& s) const {
     return o;
 }
 
-// ---- ImGui widgets (phase 1: plugins parameters on the selected node) ----
+// ---- ImGui widgets over/in-node (plugins parameters of the selected node) ----
 // Drawn on top of the custom renderer; the UI that moves nodes/wires remains
-// custom. On scope/map views this layer never runs.
+// custom. On scope/map views this layer never runs. Modes are governed by
+// nodeui::mode(): `inner` (default) anchors the strip inside the node body,
+// below the title and clipped to the node box; `below` keeps the fase-1 rail
+// under the node (used by older zoom levels and by plugins with a long list
+// of parameters).
 void GraphCanvas::drawNodeWidgets() {
     if (!imui::enabled() || !ImGui::GetCurrentContext()) return;
+    if (nodeui::mode() == nodeui::Mode::Off) return;
     const int id = singleSelection();
     const Node* n = id >= 0 ? e_->g.find(id) : nullptr;
     if (!n) return;
@@ -521,24 +520,47 @@ void GraphCanvas::drawNodeWidgets() {
     char win[40];
     std::snprintf(win, sizeof win, "##params%d", id);
     const FRect b = nodeBox(*n);
-    const Vec2 tl = w2s({b.x, b.y + b.h});
     const float pad = 6.0f, labelW = 60.0f;
-    const float width = 196.0f;
     const float rowH = ImGui::GetFontSize() + ImGui::GetStyle().ItemSpacing.y * 0.5f;
-    const float height = (float)rt->params.size() * rowH + 2 * pad + 4;
-    widgetBoxes_.clear();
-    widgetBoxes_.push_back({(int)tl.x, (int)tl.y, (int)width, (int)height});
-    ImGui::SetNextWindowPos(ImVec2(tl.x, tl.y));
-    ImGui::SetNextWindowSize(ImVec2(width, height));
+    const float railH = (float)rt->params.size() * rowH + 2 * pad + 4;
+
+    // anchor: default is the fase-1 rail under the node; `inner` uses the free
+    // body area when the box leaves room below the title and the widget list
+    // is short enough that scrolling would degrade the layout.
     ImGuiWindowFlags flags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
         ImGuiWindowFlags_NoBringToFrontOnFocus;
+    Vec2 pos = w2s({b.x, b.y + b.h});
+    float width = 196.0f, height = railH;
+    bool inner = false;
+    if (nodeui::mode() == nodeui::Mode::Inner) {
+        const Vec2 boxTl = w2s({b.x, b.y});
+        const float boxW = b.w * zoom_;
+        const float boxH = b.h * zoom_;
+        const float titleH = NODE_TITLE_H * zoom_;
+        const bool fits = boxW >= 118.0f && (boxH - titleH) >= rowH &&
+                          (boxW >= 196.0f || (int)rt->params.size() <= 3);
+        if (fits) {
+            inner = true;
+            pos = {boxTl.x, boxTl.y + titleH};
+            width = boxW;
+            height = boxH - titleH;
+        }
+    }
+
+    widgetBoxes_.clear();
+    widgetBoxes_.push_back({(int)pos.x, (int)pos.y, (int)width, (int)height});
+    ImGui::SetNextWindowPos(ImVec2(pos.x, pos.y));
+    ImGui::SetNextWindowSize(ImVec2(width, height));
     if (!ImGui::Begin(win, nullptr, flags)) {
         ImGui::End();
         return;
     }
+    // In `inner` mode with a narrow node there is no room for an inline label;
+    // the control takes the full row and the name shows as a hover tooltip.
+    const bool compact = inner && width < 150.0f;
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 2));
     for (int i = 0; i < (int)rt->params.size(); ++i) {
         const auto& pr = rt->params[i];
@@ -547,15 +569,21 @@ void GraphCanvas::drawNodeWidgets() {
         switch (pr.kind) {
             case NS_PARAM_BOOL: {
                 ImGui::SetCursorPosX(pad);
-                ImGui::TextUnformatted(pr.name.c_str());
-                ImGui::SameLine(pad + labelW);
-                ImGui::PushItemWidth(width - labelW - 2 * pad);
+                if (!compact) {
+                    ImGui::TextUnformatted(pr.name.c_str());
+                    ImGui::SameLine(pad + labelW);
+                    ImGui::PushItemWidth(width - labelW - 2 * pad);
+                } else {
+                    ImGui::PushItemWidth(width - 2 * pad);
+                }
                 bool v = cur != 0.0;
                 if (ImGui::Checkbox("##sw", &v)) {
                     widgetNode_ = id;
                     applyParam((Node*)n, i, v ? 1.0 : 0.0);
                     Refresh(false);
                 }
+                if (compact && ImGui::IsItemHovered())
+                    ImGui::SetTooltip("%s", pr.name.c_str());
                 ImGui::PopItemWidth();
                 break;
             }
@@ -566,23 +594,33 @@ void GraphCanvas::drawNodeWidgets() {
                 int idx = (int)std::lround(cur);
                 if (idx < 0 || idx >= (int)items.size()) idx = 0;
                 ImGui::SetCursorPosX(pad);
-                ImGui::TextUnformatted(pr.name.c_str());
-                ImGui::SameLine(pad + labelW);
-                ImGui::PushItemWidth(width - labelW - 2 * pad);
+                if (!compact) {
+                    ImGui::TextUnformatted(pr.name.c_str());
+                    ImGui::SameLine(pad + labelW);
+                    ImGui::PushItemWidth(width - labelW - 2 * pad);
+                } else {
+                    ImGui::PushItemWidth(width - 2 * pad);
+                }
                 if (ImGui::Combo("##combo", &idx, items.data(), (int)items.size())) {
                     widgetNode_ = id;
                     applyParam((Node*)n, i, (double)idx);
                     Refresh(false);
                 }
+                if (compact && ImGui::IsItemHovered())
+                    ImGui::SetTooltip("%s", pr.name.c_str());
                 ImGui::PopItemWidth();
                 break;
             }
             case NS_PARAM_INT: {
                 int v = (int)std::lround(cur);
                 ImGui::SetCursorPosX(pad);
-                ImGui::TextUnformatted(pr.name.c_str());
-                ImGui::SameLine(pad + labelW);
-                ImGui::PushItemWidth(width - labelW - 2 * pad);
+                if (!compact) {
+                    ImGui::TextUnformatted(pr.name.c_str());
+                    ImGui::SameLine(pad + labelW);
+                    ImGui::PushItemWidth(width - labelW - 2 * pad);
+                } else {
+                    ImGui::PushItemWidth(width - 2 * pad);
+                }
                 const double lo = pr.min, hi = pr.max;
                 const bool rangeOk = std::isfinite(lo) && std::isfinite(hi) &&
                                      hi > lo && (hi - lo) <= 100000.0;
@@ -599,14 +637,20 @@ void GraphCanvas::drawNodeWidgets() {
                     applyParam((Node*)n, i, (double)v);
                     Refresh(false);
                 }
+                if (compact && ImGui::IsItemHovered())
+                    ImGui::SetTooltip("%s", pr.name.c_str());
                 ImGui::PopItemWidth();
                 break;
             }
             default: {
                 ImGui::SetCursorPosX(pad);
-                ImGui::TextUnformatted(pr.name.c_str());
-                ImGui::SameLine(pad + labelW);
-                ImGui::PushItemWidth(width - labelW - 2 * pad);
+                if (!compact) {
+                    ImGui::TextUnformatted(pr.name.c_str());
+                    ImGui::SameLine(pad + labelW);
+                    ImGui::PushItemWidth(width - labelW - 2 * pad);
+                } else {
+                    ImGui::PushItemWidth(width - 2 * pad);
+                }
                 const double lo = pr.min, hi = pr.max;
                 const bool rangeOk = std::isfinite(lo) && std::isfinite(hi) &&
                                      hi > lo && (hi - lo) <= 1e6;
@@ -627,6 +671,8 @@ void GraphCanvas::drawNodeWidgets() {
                     applyParam((Node*)n, i, out);
                     Refresh(false);
                 }
+                if (compact && ImGui::IsItemHovered())
+                    ImGui::SetTooltip("%s", pr.name.c_str());
                 ImGui::PopItemWidth();
                 break;
             }

@@ -15,6 +15,7 @@
 #include "sdlcanvas.h"
 #include "imgui_shell.h"
 #include "imgui.h"
+#include "nodeui.h"
 
 class GraphCanvas : public wxPanel {
 public:
@@ -65,7 +66,6 @@ private:
     // ImGui widgets layer (node canvas only; scopes/maps never touch it)
     void drawNodeWidgets();            // draws ImGui widgets for the selected node
     void eventToImGui(const wxMouseEvent& ev); // feed position/button state to ImGui
-    bool imuiConsumesMouse(const wxMouseEvent& ev); // true if a widget owns the event
     bool widgetHit(const wxPoint& p) const;   // last-frame widget rectangles
 
     void onPaint(wxPaintEvent&);

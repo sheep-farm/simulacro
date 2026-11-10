@@ -62,14 +62,26 @@ created, so there are no platform event loops to reconcile.
 - Plugins export the same ABI 14 symbols (`src/sdk/nodesim_plugin.h`); the
   built-in sources live in `plugins/` and compile to `plugins/*.so`.
 
-## Dear ImGui widgets (fase 1)
+## Dear ImGui widgets (fase 1/2)
 
 The node canvas hosts a scoped Dear ImGui layer (`src/imgui_shell.*`,
 vendored under `third_party/imgui/`, backend `imgui_impl_sdlrenderer2`).
 Design rules:
 
 - **Renderer untouched:** scope charts, maps and the wx chrome stay
-  custom; ImGui is only for in-node widgets (parameter rails) in fase 1.
+  custom; ImGui is only for in-node widget rails in fase 1/2.
+
+- **nodeui policy (`src/nodeui.h`):** `SIMULACRO_NODE_UI` selects where the
+  parameter strip lives: `inner` (default) anchors it to the node body,
+  clipped to the node box (compact layout — control takes the full row, name
+  as hover tooltip — when the box is too narrow for a label); `below` keeps
+  the fase-1 rail; `off` disables in-canvas editing. `nodeui::mode()` is read
+  once at startup: switching modes needs a restart, by design.
+
+- **Ports do not move:** the strip is an overlay on the existing node box;
+  `nodeBox/nodeWidth/nodeHeight`, wires and port anchors keep the engine
+  geometry — reserving space inside the node body for plugin-authored UI is
+  reserved for fase 3 (ABI 15 layout spec).
 - **Backend manual:** wxWidgets owns the event loop; the canvas feeds
   ImGuiIO (`mouseMove/Button/Wheel/Key/Char`) before deciding whether the
   widget layer should consume the event. A last-frame rectangle list

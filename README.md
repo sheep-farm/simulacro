@@ -13,11 +13,17 @@ wx panels:
 - headless runner (`--run`), port traces and numeric regression through
   `tests/golden/`;
 - **in-canvas parameter widgets (Dear ImGui)**: the selected plugin node
-  shows a boolean switch, number slider/input and enum combo right below the
-  node, rendered by the same SDL software surface; the property grid stays
-  the canonical editor and each gesture yields a single undo checkpoint.
-  `SIMULACRO_IMGUI=0` (or `off`) disables the layer; `SIMULACRO_IMGUI_DEBUG=1`
-  logs per-command render errors. Scope charts and maps never touch ImGui;
+  hosts its parameter controls right in the drawing. Default mode `inner`
+  anchors the control strip **inside the node body** (below the title; a
+  narrow node switches to the compact layout where the control takes the
+  full row and the name shows on hover). `SIMULACRO_NODE_UI=below` keeps the
+  fase-1 rail under the node, and `SIMULACRO_NODE_UI=off` disables the
+  in-canvas layer entirely (property grid only). The property grid stays the
+  canonical editor and each gesture yields a single undo checkpoint.
+  `SIMULACRO_IMGUI=0` (or `off`) disables the ImGui layer itself;
+  `SIMULACRO_IMGUI_DEBUG=1` logs per-command render errors. Scope charts and
+  maps never touch ImGui. Examples: `examples/painel-innode.nodesim`
+  (script → pgain → LED, curated for `inner` at zoom ~1:1);
 - plugin discovery folder `~/.local/share/nodesim/plugins` and the `NODESIM_*`
   environment variables are compatibility surfaces: do not rename them.
 
@@ -114,6 +120,7 @@ src/core/      engine (graph, steps, expressions, scopes, maps, i18n key tables,
 src/sdk/       public plugin ABI header (ABI 14)
 src/engine.*   headless model: graph, clock, scopes, undo, files
 src/canvas.*   wxPanel node canvas (SDL off-screen renderer)
+src/nodeui.*   policy of where in-node widget strips live (inner/below/off)
 src/imgui_shell.* Dear ImGui shim: context/fonts/theme/events (fase 1)
 third_party/imgui vendored (v1.93.0, SDL renderer backend)
 src/properties.* wxPropertyGrid editor
