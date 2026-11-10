@@ -22,7 +22,14 @@ wx panels:
   canonical editor and each gesture yields a single undo checkpoint.
   `SIMULACRO_IMGUI=0` (or `off`) disables the ImGui layer itself;
   `SIMULACRO_IMGUI_DEBUG=1` logs per-command render errors. Scope charts and
-  maps never touch ImGui. Examples: `examples/painel-innode.nodesim`
+  maps never touch ImGui.
+- **plugin-authored layout (fase 3)**: a type can declare its in-node widget
+  list with the optional `nodesim_plugin_ui()` symbol (`NS_PLUGIN_UI`), bound
+  to `params[]`/`texts[]` (sliders, switches, enums, inputs, LEDs, labels).
+  The host renders it, reserves room in the node body so ports do not move,
+  and keeps the generic editor for plugins without the symbol. Built-ins
+  already using it: `led` (RGB sliders) and `pgain` (gain slider). Details:
+  `docs/abi.md`. Examples: `examples/painel-innode.nodesim`
   (script → pgain → LED, curated for `inner` at zoom ~1:1);
 - plugin discovery folder `~/.local/share/nodesim/plugins` and the `NODESIM_*`
   environment variables are compatibility surfaces: do not rename them.

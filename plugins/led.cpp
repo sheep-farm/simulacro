@@ -265,6 +265,17 @@ NsNodeType kind() {
 }
 NsNodeType types[] = {kind()};
 
+// Declarative in-node UI (additive ABI 14 extension): three RGB sliders bound
+// to params 0..2 plus static captions. Host-drawn; the plugin keeps only data.
+static const NsUiItem kItensL[] = {
+    {NS_UI_LABEL, "RGB", -1, 0, 0, 0, 0},
+    {NS_UI_INT, "", 0, 0, 0, 0, 0},
+    {NS_UI_INT, "", 1, 0, 0, 0, 0},
+    {NS_UI_INT, "", 2, 0, 0, 0, 0},
+};
+static const NsUiSpec kSpecsL[] = {{"led", 4, kItensL}};
+NS_PLUGIN_UI(kSpecsL, 1);
+
 NsPlugin plugin = NS_PLUGIN_BUILTIN("led", "1.1", 1, types, "Display");
 } // namespace
 

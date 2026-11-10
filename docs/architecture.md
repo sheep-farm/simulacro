@@ -62,14 +62,14 @@ created, so there are no platform event loops to reconcile.
 - Plugins export the same ABI 14 symbols (`src/sdk/nodesim_plugin.h`); the
   built-in sources live in `plugins/` and compile to `plugins/*.so`.
 
-## Dear ImGui widgets (fase 1/2)
+## Dear ImGui widgets (in-node)
 
 The node canvas hosts a scoped Dear ImGui layer (`src/imgui_shell.*`,
 vendored under `third_party/imgui/`, backend `imgui_impl_sdlrenderer2`).
 Design rules:
 
 - **Renderer untouched:** scope charts, maps and the wx chrome stay
-  custom; ImGui is only for in-node widget rails in fase 1/2.
+  custom; ImGui is only for in-node widget rails.
 
 - **nodeui policy (`src/nodeui.h`):** `SIMULACRO_NODE_UI` selects where the
   parameter strip lives: `inner` (default) anchors it to the node body,
@@ -80,8 +80,16 @@ Design rules:
 
 - **Ports do not move:** the strip is an overlay on the existing node box;
   `nodeBox/nodeWidth/nodeHeight`, wires and port anchors keep the engine
-  geometry — reserving space inside the node body for plugin-authored UI is
-  reserved for fase 3 (ABI 15 layout spec).
+  geometry. When a plugin declares in-node widgets (fase 3), the host
+  reserves room in the *transient preferred size* (`szW/szH`) so the strip
+  and the ports no longer collide; node fit and wire anchors follow the
+  engine box automatically (no `.nodesim` change, no ABI bump).
+
+- **Layout precedence (fase 3):** the plugin's own `nodesim_plugin_ui()`
+  declaration wins; without it the host builds the same kind of strip from
+  `params[]/texts[]`. Both are host-rendered, themed (`kUi`) and coalesced
+  into the same undo gesture. Loader validation lives with the other ABI-14
+  extensions (`docs/abi.md`).
 - **Backend manual:** wxWidgets owns the event loop; the canvas feeds
   ImGuiIO (`mouseMove/Button/Wheel/Key/Char`) before deciding whether the
   widget layer should consume the event. A last-frame rectangle list
@@ -100,8 +108,8 @@ Design rules:
 - **Kill switch:** `SIMULACRO_IMGUI=0` / `off` disables the layer without
   changing any other behavior; `SIMULACRO_IMGUI_DEBUG=1` prints per-command
   render diagnostics (used during integration).
-- **Renderer glue:** `SdlCanvas` signals `rendererRebuilt()` when pane resizes
-  recreate the software renderer; `imui::renChanged()` then rebuilds the
+- **Renderer glue:** `SdlCanvas` signals `rendererRebuilt()` when a pane resize
+  recreates the software renderer; `imui::renChanged()` then rebuilds the
   shell, because the atlas texture belonged to the renderer that died with
   the resize.
 

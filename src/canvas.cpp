@@ -9,7 +9,6 @@
 #include <wx/dcbuffer.h>
 #include <algorithm>
 #include <cmath>
-#include <cstdio>
 #include <cstdlib>
 #include <map>
 
@@ -116,8 +115,20 @@ bool GraphCanvas::applyParam(Node* n, int i, double v) {
     return true;
 }
 
+void GraphCanvas::applyText(Node* n, int i, const std::string& s) {
+    if (!n || !n->pinst) return;
+    if (!widgetUndoActive_) {
+        e_->checkpoint();
+        widgetUndoActive_ = true;
+    }
+    n->pinst->callSetText(n->pinst->handle, i, s.c_str());
+    e_->refreshPstate(*n);
+    e_->dirty = true;
+}
+
 void GraphCanvas::onPaint(wxPaintEvent&) {
     wxAutoBufferedPaintDC dc(this);
+    if (frameDelay_ > 0 && --frameDelay_ == 0) centerOnGraph();
     const wxSize sz = GetClientSize();
     if (bmp_.ensure(sz.x, sz.y)) {
         if (bmp_.rendererRebuilt()) {       // atlas/renderer pair died with the panel
@@ -497,13 +508,15 @@ std::string GraphCanvas::oneLine(const std::string& s) const {
     return o;
 }
 
-// ---- ImGui widgets over/in-node (plugins parameters of the selected node) ----
+// ---- ImGui widgets over/in-node (parameter editors of the selected node) ----
 // Drawn on top of the custom renderer; the UI that moves nodes/wires remains
-// custom. On scope/map views this layer never runs. Modes are governed by
-// nodeui::mode(): `inner` (default) anchors the strip inside the node body,
-// below the title and clipped to the node box; `below` keeps the fase-1 rail
-// under the node (used by older zoom levels and by plugins with a long list
-// of parameters).
+// custom. On scope/map views this layer never runs.
+//
+// Layout precedence (fase 3): the declarative in-node layout exported by the
+// plugin via `nodesim_plugin_ui` when present; otherwise the generic parameter
+// list (fase 2). Modes come from nodeui::mode(): `inner` (default) anchors the
+// strip inside the node body below the title, clipped to the node box; `below`
+// keeps the fase-1 rail under the node; `off` disables canvas editing.
 void GraphCanvas::drawNodeWidgets() {
     if (!imui::enabled() || !ImGui::GetCurrentContext()) return;
     if (nodeui::mode() == nodeui::Mode::Off) return;
@@ -514,26 +527,29 @@ void GraphCanvas::drawNodeWidgets() {
     auto* inst = n->pinst.get();
     if (!inst) return;
     const auto* rt = e_->typeOf(*n);
-    if (!rt || rt->params.empty()) return;
-    if (zoom_ < 0.45f) return;   // window tiny: editing is for the properties panel
+    if (!rt) return;
+    const bool authored = !rt->ui.empty();
+    if (!authored && rt->params.empty()) return;
+    if (zoom_ < 0.45f) return;   // window tiny: editing is for the property grid
 
     char win[40];
     std::snprintf(win, sizeof win, "##params%d", id);
     const FRect b = nodeBox(*n);
     const float pad = 6.0f, labelW = 60.0f;
     const float rowH = ImGui::GetFontSize() + ImGui::GetStyle().ItemSpacing.y * 0.5f;
-    const float railH = (float)rt->params.size() * rowH + 2 * pad + 4;
+    const int rows = authored ? (int)rt->ui.size() : (int)rt->params.size();
+    // LED rows are visual chips, not widgets; they still take one row each.
+    float railH = (float)rows * rowH + 2 * pad + 4;
 
-    // anchor: default is the fase-1 rail under the node; `inner` uses the free
-    // body area when the box leaves room below the title and the widget list
-    // is short enough that scrolling would degrade the layout.
     ImGuiWindowFlags flags =
         ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
         ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
         ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
         ImGuiWindowFlags_NoBringToFrontOnFocus;
+
     Vec2 pos = w2s({b.x, b.y + b.h});
-    float width = 196.0f, height = railH;
+    float width = 196.0f;
+    float height = railH;
     bool inner = false;
     if (nodeui::mode() == nodeui::Mode::Inner) {
         const Vec2 boxTl = w2s({b.x, b.y});
@@ -541,7 +557,7 @@ void GraphCanvas::drawNodeWidgets() {
         const float boxH = b.h * zoom_;
         const float titleH = NODE_TITLE_H * zoom_;
         const bool fits = boxW >= 118.0f && (boxH - titleH) >= rowH &&
-                          (boxW >= 196.0f || (int)rt->params.size() <= 3);
+                          (authored || (int)rt->params.size() <= 3);
         if (fits) {
             inner = true;
             pos = {boxTl.x, boxTl.y + titleH};
@@ -558,32 +574,201 @@ void GraphCanvas::drawNodeWidgets() {
         ImGui::End();
         return;
     }
-    // In `inner` mode with a narrow node there is no room for an inline label;
-    // the control takes the full row and the name shows as a hover tooltip.
     const bool compact = inner && width < 150.0f;
     ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 2));
-    for (int i = 0; i < (int)rt->params.size(); ++i) {
-        const auto& pr = rt->params[i];
-        const double cur = inst->callGetParam(inst->handle, i);
-        ImGui::PushID(i);
+
+    auto displayName = [&](const PluginRegistry::Param* pr,
+                           const std::string& overrideName) {
+        if (!overrideName.empty()) return overrideName;
+        return pr ? pr->name : std::string();
+    };
+
+    // Generic/declarative row body: one widget per param (or Uint item).
+    auto rowStart = [&](const std::string& shownName) {
+        ImGui::SetCursorPosX(pad);
+        if (compact) {
+            ImGui::PushItemWidth(width - 2 * pad);
+        } else {
+            ImGui::TextUnformatted(shownName.c_str());
+            ImGui::SameLine(pad + labelW);
+            ImGui::PushItemWidth(width - labelW - 2 * pad);
+        }
+    };
+    auto rowHover = [&](const std::string& shownName) {
+        if (compact && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", shownName.c_str());
+    };
+
+    for (int row = 0; row < rows; ++row) {
+        // Declarative-only leafs that open with no parameter binding.
+        if (authored) {
+            const auto& it = rt->ui[(size_t)row];
+            if (it.kind == NS_UI_END) break;
+            if (it.kind == NS_UI_LABEL) {
+                ImGui::SetCursorPosX(pad);
+                ImGui::TextUnformatted(it.name.c_str());
+                continue;
+            }
+            if (it.kind == NS_UI_VSPACE) {
+                ImGui::Dummy(ImVec2(0.0f, rowH));
+                continue;
+            }
+            if (it.kind == NS_UI_LED) {
+                const int idx = it.index;
+                const bool okBound =
+                    idx >= 0 && idx < (int)rt->params.size() &&
+                    rt->params[(size_t)idx].kind == NS_PARAM_BOOL;
+                const double v = okBound ? inst->callGetParam(inst->handle, idx) : 0.0;
+                const bool on = v > 0.5;
+                const ImVec2 c = ImGui::GetCursorScreenPos();
+                const float r = 5.0f;
+                ImGui::GetWindowDrawList()->AddCircleFilled(
+                    ImVec2(c.x + pad + r, c.y + rowH * 0.5f), r,
+                    on ? IM_COL32(kUi.ok.r, kUi.ok.g, kUi.ok.b, 255)
+                       : IM_COL32(kUi.weak.r, kUi.weak.g, kUi.weak.b, 255));
+                ImGui::Dummy(ImVec2(width - pad - r, rowH));
+                continue;
+            }
+        }
+
+        ImGui::PushID(row);
+        if (authored) {
+            // Declarative item with binding.
+            const auto& it = rt->ui[(size_t)row];
+            const bool isText = it.kind == NS_UI_TEXT;
+            if (isText) {
+                const std::string shown = it.name.empty()
+                                              ? (it.index < (int)rt->texts.size()
+                                                     ? rt->texts[(size_t)it.index]
+                                                     : std::string())
+                                              : it.name;
+                rowStart(shown);
+                char cur[512] = {0};
+                if (char* s = inst->callGetText(inst->handle, it.index)) {
+                    strncpy(cur, s, sizeof(cur) - 1);
+                    ::free(s);
+                }
+                ImGui::InputText("##tbl", cur, sizeof(cur));
+                const bool entered =
+                    ImGui::IsItemDeactivatedAfterEdit() || ImGui::IsItemEdited();
+                if (entered) {
+                    widgetNode_ = id;
+                    applyText((Node*)n, it.index, cur);
+                    Refresh(false);
+                }
+                rowHover(shown);
+                ImGui::PopItemWidth();
+                ImGui::PopID();
+                continue;
+            }
+            if (it.index < 0 || it.index >= (int)rt->params.size()) {
+                ImGui::PopID();
+                continue;  // loader validated but be defensive
+            }
+            const auto& pr = rt->params[(size_t)it.index];
+            const double cur = inst->callGetParam(inst->handle, it.index);
+            const std::string shownName = displayName(&pr, it.name);
+            switch (pr.kind) {
+                case NS_PARAM_BOOL: {
+                    rowStart(shownName);
+                    bool v = cur != 0.0;
+                    if (ImGui::Checkbox("##sw", &v)) {
+                        widgetNode_ = id;
+                        applyParam((Node*)n, it.index, v ? 1.0 : 0.0);
+                        Refresh(false);
+                    }
+                    rowHover(shownName);
+                    ImGui::PopItemWidth();
+                    break;
+                }
+                case NS_PARAM_ENUM: {
+                    std::vector<const char*> items;
+                    items.reserve(pr.choices.size());
+                    for (const auto& s : pr.choices) items.push_back(s.c_str());
+                    int idx = (int)std::lround(cur);
+                    if (idx < 0 || idx >= (int)items.size()) idx = 0;
+                    rowStart(shownName);
+                    if (ImGui::Combo("##combo", &idx, items.data(), (int)items.size())) {
+                        widgetNode_ = id;
+                        applyParam((Node*)n, it.index, (double)idx);
+                        Refresh(false);
+                    }
+                    rowHover(shownName);
+                    ImGui::PopItemWidth();
+                    break;
+                }
+                case NS_PARAM_INT: {
+                    int v = (int)std::lround(cur);
+                    rowStart(shownName);
+                    const double lo = it.min != 0 ? it.min : pr.min;
+                    const double hi = it.max != 0 ? it.max : pr.max;
+                    const bool rangeOk =
+                        std::isfinite(lo) && std::isfinite(hi) && hi > lo &&
+                        (hi - lo) <= 100000.0;
+                    bool changed = false;
+                    if (rangeOk) {
+                        changed = ImGui::SliderInt("##int", &v, (int)lo, (int)hi);
+                    } else {
+                        changed = ImGui::InputInt("##int", &v, 1, 100);
+                        if (std::isfinite(lo)) v = std::max(v, (int)lo);
+                        if (std::isfinite(hi)) v = std::min(v, (int)hi);
+                    }
+                    if (changed) {
+                        widgetNode_ = id;
+                        applyParam((Node*)n, it.index, (double)v);
+                        Refresh(false);
+                    }
+                    rowHover(shownName);
+                    ImGui::PopItemWidth();
+                    break;
+                }
+                default: {
+                    rowStart(shownName);
+                    const double lo = it.min != 0 ? it.min : pr.min;
+                    const double hi = it.max != 0 ? it.max : pr.max;
+                    const bool rangeOk =
+                        std::isfinite(lo) && std::isfinite(hi) && hi > lo &&
+                        (hi - lo) <= 1e6;
+                    bool changed = false;
+                    double out = cur;
+                    if (rangeOk) {
+                        float f = (float)cur;
+                        changed =
+                            ImGui::SliderFloat("##f", &f, (float)lo, (float)hi, "%.4f");
+                        out = (double)f;
+                    } else {
+                        ImGui::InputDouble("##num", &out, 0.0, 0.0, "%.6g");
+                        changed = ImGui::IsItemDeactivatedAfterEdit();
+                        if (std::isfinite(lo)) out = std::max(out, lo);
+                        if (std::isfinite(hi)) out = std::min(out, hi);
+                    }
+                    if (changed) {
+                        widgetNode_ = id;
+                        applyParam((Node*)n, it.index, out);
+                        Refresh(false);
+                    }
+                    rowHover(shownName);
+                    ImGui::PopItemWidth();
+                    break;
+                }
+            }
+            ImGui::PopID();
+            continue;
+        }
+
+        // Generic path (fase 2): one row per parameter.
+        const auto& pr = rt->params[(size_t)row];
+        const double cur = inst->callGetParam(inst->handle, row);
+        const std::string shownName = pr.name;
         switch (pr.kind) {
             case NS_PARAM_BOOL: {
-                ImGui::SetCursorPosX(pad);
-                if (!compact) {
-                    ImGui::TextUnformatted(pr.name.c_str());
-                    ImGui::SameLine(pad + labelW);
-                    ImGui::PushItemWidth(width - labelW - 2 * pad);
-                } else {
-                    ImGui::PushItemWidth(width - 2 * pad);
-                }
+                rowStart(shownName);
                 bool v = cur != 0.0;
                 if (ImGui::Checkbox("##sw", &v)) {
                     widgetNode_ = id;
-                    applyParam((Node*)n, i, v ? 1.0 : 0.0);
+                    applyParam((Node*)n, row, v ? 1.0 : 0.0);
                     Refresh(false);
                 }
-                if (compact && ImGui::IsItemHovered())
-                    ImGui::SetTooltip("%s", pr.name.c_str());
+                rowHover(shownName);
                 ImGui::PopItemWidth();
                 break;
             }
@@ -593,37 +778,23 @@ void GraphCanvas::drawNodeWidgets() {
                 for (const auto& s : pr.choices) items.push_back(s.c_str());
                 int idx = (int)std::lround(cur);
                 if (idx < 0 || idx >= (int)items.size()) idx = 0;
-                ImGui::SetCursorPosX(pad);
-                if (!compact) {
-                    ImGui::TextUnformatted(pr.name.c_str());
-                    ImGui::SameLine(pad + labelW);
-                    ImGui::PushItemWidth(width - labelW - 2 * pad);
-                } else {
-                    ImGui::PushItemWidth(width - 2 * pad);
-                }
+                rowStart(shownName);
                 if (ImGui::Combo("##combo", &idx, items.data(), (int)items.size())) {
                     widgetNode_ = id;
-                    applyParam((Node*)n, i, (double)idx);
+                    applyParam((Node*)n, row, (double)idx);
                     Refresh(false);
                 }
-                if (compact && ImGui::IsItemHovered())
-                    ImGui::SetTooltip("%s", pr.name.c_str());
+                rowHover(shownName);
                 ImGui::PopItemWidth();
                 break;
             }
             case NS_PARAM_INT: {
                 int v = (int)std::lround(cur);
-                ImGui::SetCursorPosX(pad);
-                if (!compact) {
-                    ImGui::TextUnformatted(pr.name.c_str());
-                    ImGui::SameLine(pad + labelW);
-                    ImGui::PushItemWidth(width - labelW - 2 * pad);
-                } else {
-                    ImGui::PushItemWidth(width - 2 * pad);
-                }
+                rowStart(shownName);
                 const double lo = pr.min, hi = pr.max;
-                const bool rangeOk = std::isfinite(lo) && std::isfinite(hi) &&
-                                     hi > lo && (hi - lo) <= 100000.0;
+                const bool rangeOk =
+                    std::isfinite(lo) && std::isfinite(hi) && hi > lo &&
+                    (hi - lo) <= 100000.0;
                 bool changed = false;
                 if (rangeOk) {
                     changed = ImGui::SliderInt("##int", &v, (int)lo, (int)hi);
@@ -634,31 +805,24 @@ void GraphCanvas::drawNodeWidgets() {
                 }
                 if (changed) {
                     widgetNode_ = id;
-                    applyParam((Node*)n, i, (double)v);
+                    applyParam((Node*)n, row, (double)v);
                     Refresh(false);
                 }
-                if (compact && ImGui::IsItemHovered())
-                    ImGui::SetTooltip("%s", pr.name.c_str());
+                rowHover(shownName);
                 ImGui::PopItemWidth();
                 break;
             }
             default: {
-                ImGui::SetCursorPosX(pad);
-                if (!compact) {
-                    ImGui::TextUnformatted(pr.name.c_str());
-                    ImGui::SameLine(pad + labelW);
-                    ImGui::PushItemWidth(width - labelW - 2 * pad);
-                } else {
-                    ImGui::PushItemWidth(width - 2 * pad);
-                }
+                rowStart(shownName);
                 const double lo = pr.min, hi = pr.max;
-                const bool rangeOk = std::isfinite(lo) && std::isfinite(hi) &&
-                                     hi > lo && (hi - lo) <= 1e6;
+                const bool rangeOk =
+                    std::isfinite(lo) && std::isfinite(hi) && hi > lo && (hi - lo) <= 1e6;
                 bool changed = false;
                 double out = cur;
                 if (rangeOk) {
                     float f = (float)cur;
-                    changed = ImGui::SliderFloat("##f", &f, (float)lo, (float)hi, "%.4f");
+                    changed =
+                        ImGui::SliderFloat("##f", &f, (float)lo, (float)hi, "%.4f");
                     out = (double)f;
                 } else {
                     ImGui::InputDouble("##num", &out, 0.0, 0.0, "%.6g");
@@ -668,11 +832,10 @@ void GraphCanvas::drawNodeWidgets() {
                 }
                 if (changed) {
                     widgetNode_ = id;
-                    applyParam((Node*)n, i, out);
+                    applyParam((Node*)n, row, out);
                     Refresh(false);
                 }
-                if (compact && ImGui::IsItemHovered())
-                    ImGui::SetTooltip("%s", pr.name.c_str());
+                rowHover(shownName);
                 ImGui::PopItemWidth();
                 break;
             }
@@ -1100,6 +1263,10 @@ void GraphCanvas::zoomBy(float factor, wxPoint anchor) {
 
 void GraphCanvas::zoomReset() {
     centerOnGraph();
+}
+
+void GraphCanvas::requestFit() {
+    frameDelay_ = 12;   // paints until re-fit (pane layout settles)
 }
 
 void GraphCanvas::centerOnGraph() {

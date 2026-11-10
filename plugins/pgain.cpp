@@ -70,6 +70,13 @@ NsNodeType types[] = {
      1, params, getParam, setParam},
 };
 
+// Declarative in-node UI (additive ABI 14 extension): a single slider bound to
+// param 0. The plugin still only knows about params/save/load; the *host* draws
+// it. Third parties without the symbol keep the generic editor.
+static const NsUiItem kItensK[] = {{NS_UI_SLIDER, "", 0, 0, 0, 0, 0}};
+static const NsUiSpec kSpecsGanho[] = {{"pgain", 1, kItensK}};
+NS_PLUGIN_UI(kSpecsGanho, 1);
+
 NsPlugin plugin = NS_PLUGIN_BUILTIN("pgain", "1.0", 1, types, "Math");
 } // namespace
 

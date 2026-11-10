@@ -101,7 +101,9 @@ MainFrame::MainFrame()
     updateTitle();
     updateStatus();
     // GTK submenu items can only be checked after the menu is realized.
-    CallAfter([this] { updateChecks(); });
+    // Refit once the AUI panes settle: loadFile ran before the canvas pane
+    // reached its final size, so the constructor's fit used a stale rect.
+    canvas_->requestFit();
 
     timer_.SetOwner(this);
     timer_.Start(1000 / std::max(1, engine_.rate));
@@ -394,6 +396,7 @@ bool MainFrame::loadFile(const std::string& path) {
     props_->setNode(-1);
     canvas_->clearSelection();
     canvas_->centerOnGraph();
+    canvas_->requestFit();
     palette_->rebuild();
     updateTitle();
     updateStatus();

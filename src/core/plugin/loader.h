@@ -33,5 +33,6 @@ void close(void* handle);
 void loadResources(PluginRegistry& pm, PluginRegistry::Lib& lib);
 int loadExec(PluginRegistry& pm, size_t libIndex);
 int loadEvents(PluginRegistry& pm, size_t libIndex);
+int loadUi(PluginRegistry& pm, size_t libIndex);
 
 } // namespace plugin_loader

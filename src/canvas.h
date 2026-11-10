@@ -38,6 +38,7 @@ public:
     void zoomBy(float factor, wxPoint anchor);
     void zoomReset();
     void centerOnGraph();
+    void requestFit();   // deferred fit (AUI settles after load)
     void refreshFromModel();
 
     void setShowValues(bool v) { showVals_ = v; Refresh(false); }
@@ -112,6 +113,7 @@ private:
     void addNodeContext(int kind, const std::string& plugin, Vec2 world);
     void openNode(int id);
     bool applyParam(Node* n, int i, double v);
+    void applyText(Node* n, int i, const std::string& s);
     void invalidateAll();
 
     Engine* e_;
@@ -168,4 +170,5 @@ private:
 
     bool dragging_ = false;
     bool moved_ = false;
+    int frameDelay_ = 0; // requestFit counter (paints until re-fit)
 };

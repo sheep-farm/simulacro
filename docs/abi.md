@@ -1,0 +1,71 @@
+# ABI — contract between the host and the plugins
+
+The simulator's plugin ABI lives in `src/sdk/nodesim_plugin.h`. **Today it is
+the ABI 14** (`NODESIM_PLUGIN_API = 14`), frozen: the file format (`.nodesim`
+10) and the ABI do not move without an explicit decision and a migration note
+in this document.
+
+## How ABI 14 evolves (additive extensions)
+
+New capabilities reach the plugins as **optional symbols** resolved with
+`dlsym` by the host. A `.so` that does not export them behaves exactly as ABI
+14 did, and *there is no ABI bump*; a `.so` that exports them must match the
+expected table shape (`api == NODESIM_PLUGIN_API`, `struct_size` documented).
+All tables declare `api`/`struct_size`/counts and are validated on load
+(warnings go to the diagnostics; invalid entries are skipped).
+
+Currently adopted extensions (all additive; no `.nodesim` change):
+
+| Extension symbol | What it declares | Where |
+| --- | --- | --- |
+| `nodesim_plugin_resources()` | files/directories/env vars the plugin reads (provenance) | `NS_PLUGIN_RESOURCES` |
+| `nodesim_plugin_exec()` | execution policy per type (e.g. substeps 1..1024) | `NS_PLUGIN_EXEC` |
+| `nodesim_plugin_events()` | discrete event sources and optional sink | `NS_PLUGIN_EVENTS` |
+| `nodesim_plugin_ui()` | declarative in-node widget layout (see below) | `NS_PLUGIN_UI` |
+
+## The declarative UI (`nodesim_plugin_ui`)
+
+The host (canvas) renders parameter controls *directly on the node drawing*.
+Two levels exist, and both are host-side; the plugin never draws them:
+
+1. **Generic layout (default, no declaration):** sliders/switches/combos and
+   Inputs generated from the type's `params[]`/texts, below the title or in a
+   rail under the node (`SIMULACRO_NODE_UI`, see `docs/architecture.md`).
+2. **Authored layout** (recommended for third-parties): the type exports
+   `nodesim_plugin_ui()` and declares a widget list bound to its
+   `params[]`/`texts[]`:
+
+```cpp
+#include "nodesim_plugin.h"   // (or the in-tree <plugin.h>)
+
+// binding: params[0] NUM -> slider, params[1] TEXT -> input, etc.
+static const NsUiItem kItems[] = {
+    {NS_UI_LABEL, "settings", -1, 0, 0, 0, 0},
+    {NS_UI_SLIDER, "", 0, 0, 0, 0, 0},          // "" = use the param name
+    {NS_UI_SWITCH, "", 1, 0, 0, 0, 0},
+    {NS_UI_TEXT,  "path label", 1, 0, 0, 0, 0}, // texts[1]
+    {NS_UI_LED,   "", 1, 0, 0, 0, 0},           // lights when params[1] >= .5
+    {NS_UI_VSPACE, nullptr, -1, 0, 0, 0, 0},
+};
+static const NsUiSpec kSpecs[] = {{{"meu_tipo", 5, kItems}}};
+NS_PLUGIN_UI(kSpecs, 1);
+```
+
+Rules (validated by the host and reported as warnings when violated):
+
+- `index` must be a valid `params[]` (or `texts[]`, for `NS_UI_TEXT`) entry.
+- The kind should match the declared parameter kind
+  (`NS_UI_SLIDER⟶NUM`, `NS_UI_INT⟶INT`, `NS_UI_SWITCH⟶BOOL`,
+  `NS_UI_COMBO⟶ENUM`); a mismatch keeps the generic behavior and shows as a
+  diagnostic.
+- Unknown kinds, invalid bindings, unknown types, duplicate specs and
+  out-of-range counts are skipped with a warning; the plugin never crashes
+  the host because of UI metadata.
+- When a type has a layout, the host **reserves** room in `szH/szW`
+  (transient preferred size) so the strip never covers the ports; the graph
+  positions of wires/pins follow the node box automatically.
+
+The visual result participates in the undo/redo cycle: every gesture made on
+an in-node widget writes through `setParam/setText` and yields a single
+engine checkpoint (see `docs/architecture.md`, fase notes). Third-party
+plugins without `nodesim_plugin_ui` keep working with the generic editor.

@@ -463,4 +463,120 @@ int loadEvents(PluginRegistry& pm, size_t libIndex) {
 }
 
 
+
+// ---- In-node UI (additive ABI 14 extension: nodesim_plugin_ui) ----
+int loadUi(PluginRegistry& pm, size_t libIndex) {
+    if (libIndex >= pm.libs.size()) return 0;
+    PluginRegistry::Lib& lib = pm.libs[libIndex];
+    dlerror();
+    auto sym = (const NsUiTable* (*)())dlsym(lib.h, "nodesim_plugin_ui");
+    if (!sym) {
+        dlerror(); // absence is normal (generic parameter editor remains)
+        return 0;
+    }
+    const NsUiTable* table = sym();
+    if (!table) {
+        pm.addProblem(lib.file, "nodesim_plugin_ui returned null");
+        return 0;
+    }
+    if (table->api != NODESIM_PLUGIN_API) {
+        pm.addProblem(lib.file, "ui table with ABI " + std::to_string(table->api) +
+                                    " (expected " + std::to_string(NODESIM_PLUGIN_API) + ")");
+        return 0;
+    }
+    if (table->struct_size != 0 && table->struct_size < (int)sizeof(NsUiTable)) {
+        pm.addProblem(lib.file, "ui struct_size " +
+                                    std::to_string(table->struct_size) +
+                                    " smaller than NsUiTable (" +
+                                    std::to_string(sizeof(NsUiTable)) + ")");
+        return 0;
+    }
+    if (table->num_specs < 0 || table->num_specs > 1024) {
+        pm.addProblem(lib.file, "invalid num_specs in the ui table");
+        return 0;
+    }
+    if (table->num_specs > 0 && !table->specs) {
+        pm.addProblem(lib.file, "num_specs > 0 without a spec table");
+        return 0;
+    }
+
+    auto pluginKind = [&](const std::string& id) -> PluginRegistry::RegType* {
+        for (auto& t : pm.types)
+            if (t.lib == (int)libIndex && t.id == id) return &t;
+        return nullptr;
+    };
+
+    int applied = 0;
+    for (int i = 0; i < table->num_specs; ++i) {
+        const NsUiSpec& sp = table->specs[i];
+        const std::string id = sp.type ? sp.type : "";
+        if (id.empty()) {
+            pm.addProblem(lib.file, "ui spec without type (ignored)");
+            continue;
+        }
+        PluginRegistry::RegType* t = pluginKind(id);
+        if (!t) {
+            pm.addProblem(lib.file, "ui spec for unknown type: " + id);
+            continue;
+        }
+        if (sp.num_items < 0 || sp.num_items > 512) {
+            pm.addProblem(lib.file, "invalid num_items in the ui spec of '" + id + "'");
+            continue;
+        }
+        if (sp.num_items > 0 && !sp.items) {
+            pm.addProblem(lib.file, "num_items > 0 without an item table in '" + id + "'");
+            continue;
+        }
+        t->ui.clear();
+        int appliedType = 0;
+        for (int k = 0; k < sp.num_items; ++k) {
+            const NsUiItem& it = sp.items[k];
+            PluginRegistry::RegType::UiItem d;
+            d.kind = it.kind;
+            d.name = it.name ? it.name : "";
+            d.index = it.index;
+            d.min = it.min, d.max = it.max, d.step = it.step;
+            d.flags = it.flags;
+            const bool binds = d.kind == NS_UI_SLIDER || d.kind == NS_UI_INT ||
+                               d.kind == NS_UI_SWITCH || d.kind == NS_UI_COMBO ||
+                               d.kind == NS_UI_LED;
+            if (d.kind == NS_UI_END) break;
+            const bool textKind = d.kind == NS_UI_TEXT;
+            const bool labelKind = d.kind == NS_UI_LABEL || d.kind == NS_UI_VSPACE;
+            if (binds) {
+                if (d.index < 0 ||
+                     d.index >= (textKind ? (int)t->texts.size() : (int)t->params.size())) {
+                    pm.addProblem(lib.file,
+                                  "ui item with an index out of bounds in '" + id + "'");
+                    continue;
+                }
+                // A switch bound to an INT/NUM still works: >= 0.5 turns on.
+                // A slider bound to an ENUM/BOOL would write outside the domain;
+                // keep the host permissive (clamp on draw) but warn.
+                if (!textKind) {
+                    const PluginRegistry::Param& sr = t->params[(size_t)d.index];
+                    const bool okKind =
+                        (d.kind == NS_UI_SLIDER && sr.kind == NS_PARAM_NUM) ||
+                        (d.kind == NS_UI_INT && sr.kind == NS_PARAM_INT) ||
+                        (d.kind == NS_UI_SWITCH && sr.kind == NS_PARAM_BOOL) ||
+                        (d.kind == NS_UI_COMBO && sr.kind == NS_PARAM_ENUM) ||
+                        (d.kind == NS_UI_LED);
+                    if (!okKind)
+                        pm.addProblem(lib.file, "ui item '" + (d.name.empty() ? sr.name : d.name) +
+                                                   "' in '" + id +
+                                                   "': kind does not match the parameter");
+                }
+            } else if (!labelKind) {
+                pm.addProblem(lib.file, "ui item without valid binding in '" + id + "'");
+                continue;
+            }
+            t->ui.push_back(d);
+            ++appliedType;
+        }
+        if (appliedType > 0) ++applied;
+    }
+    return applied;
+}
+
+
 } // namespace plugin_loader

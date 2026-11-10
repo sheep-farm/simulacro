@@ -23,6 +23,10 @@
 //    internal substeps (NS_PLUGIN_EXEC).
 //  - `nodesim_plugin_events()` declares discrete event sources and sinks
 //    (NS_PLUGIN_EVENTS).
+//  - `nodesim_plugin_ui()` declares the in-node widget layout (sliders,
+//    switches, combos, inputs, LEDs) bound to params/texts of the same type
+//    (NS_PLUGIN_UI). The host renders it; plugins without the symbol keep
+//    the generic parameter editor.
 #pragma once
 
 #define NODESIM_PLUGIN_API 14
@@ -399,3 +403,80 @@ struct NsEvents {
                         (group_), "Flavio de Vasconcellos Correa",                   \
                         "GPL-3.0-or-later", "",                                      \
                         "Plugin embutido do nodesim", "built-in")
+
+// Convenience for the repository's built-in plugins. Third parties should use
+// NS_PLUGIN_INIT_META with their own data.
+#define NS_PLUGIN_BUILTIN(name_, version_, num_types_, types_, group_)                    \
+    NS_PLUGIN_INIT_META(NODESIM_PLUGIN_API, (name_), (version_), (num_types_), (types_), \
+                        (group_), "Flavio de Vasconcellos Correa",                   \
+                        "GPL-3.0-or-later", "",                                      \
+                        "Plugin embutido do nodesim", "built-in")
+
+// ---- In-node UI declaration (additive extension of ABI 14) ----
+// A declarative widget layout rendered by the host over (or inside) the node
+// box when the type is selected/im node canvas uses it. It binds to parameters
+// and text entries of the same type; the plugin does NOT draw anything -- it
+// declares items, with a straightforward mapping:
+//
+//   kind             binding                    rendered as
+//   NS_UI_SLIDER     params[p] (NUM)            drag slider with min/max
+//   NS_UI_INT        params[p] (INT)            int slider / numeric input
+//   NS_UI_SWITCH     params[p] (BOOL)           checkbox
+//   NS_UI_COMBO      params[p] (ENUM)           combo with choices[]
+//   NS_UI_TEXT       texts[t]                   single-line input
+//   NS_UI_LED        params[p] (>=0.5 lights)   colored dot
+//   NS_UI_LABEL      (text literal)             read-only caption
+//   NS_UI_VSPACE     (none)                     vertical spacing
+//
+// Unknown kinds and invalid bindings are ignored by the host (safe to keep
+// growing the table). The layout is *declarative*: no drawing callbacks, no
+// layout math in the plugin; the host honors the theme.
+enum NsUiKind {
+    NS_UI_END = 0,
+    NS_UI_SLIDER = 1,   // params[p], NUM slider
+    NS_UI_INT = 2,      // params[p], INT slider/input
+    NS_UI_SWITCH = 3,   // params[p], BOOL checkbox
+    NS_UI_COMBO = 4,    // params[p], ENUM combo
+    NS_UI_TEXT = 5,     // texts[t], single-line input
+    NS_UI_LED = 6,      // params[p] >= 0.5 lights up
+    NS_UI_LABEL = 7,    // static caption (uses `name` below)
+    NS_UI_VSPACE = 8,   // empty line
+};
+
+struct NsUiItem {
+    int kind;            // NsUiKind
+    const char* name;    // LABEL text or (empty = parameter name); also used as
+                         // tooltip override when non-empty
+    int index;           // params[] or texts[] index (-1 for LABEL/VSPACE)
+    double min, max, step; // 0,0,0 = use the NsParam values
+    // Reserved for future (optional hosts ignore). Zero-initialized by the table.
+    int flags;
+};
+
+struct NsUiSpec {
+    const char* type;    // NsNodeType id (must exist in the same .so)
+    int num_items;       // number of entries in items (0 = no UI)
+    const NsUiItem* items;
+};
+
+struct NsUiTable {
+    int api;             // == NODESIM_PLUGIN_API
+    int struct_size;     // sizeof(NsUiTable); 0 = minimal table
+    int num_specs;       // 0..1024
+    const NsUiSpec* specs;
+};
+
+// Exports `nodesim_plugin_ui()`. Example, in the same .cpp as nodesim_plugin():
+//   static const NsUiItem kLedItens[] = {
+//       {NS_UI_LED, ___, nullptr, 0, 0, 0, 0},   ...
+//   };
+//   static const NsUiSpec kSpecs[] = {{"led", 3, kLedItens}};
+//   NS_PLUGIN_UI(kSpecs, 1);
+// The host accepts the absence of the symbol (generic parameter editor).
+#define NS_PLUGIN_UI(specs_, n_)                                            \
+    extern "C" const NsUiTable* nodesim_plugin_ui() {                       \
+        static const NsUiTable ns_ui_ = {                                    \
+            NODESIM_PLUGIN_API, (int)sizeof(NsUiTable), (n_), (specs_)};     \
+        return &ns_ui_;                                                      \
+    }
+

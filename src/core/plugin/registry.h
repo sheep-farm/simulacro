@@ -50,6 +50,15 @@ struct PluginRegistry {
         int substeps = 1;                 // internal calls per step (1..1024)
         std::vector<EventDecl> events;     // sources declared by nodesim_plugin_events
         void (*onEvent)(void*, const NsEvent*) = nullptr; // optional sink
+        // Additive ABI 14 extension: declarative in-node UI (nodesim_plugin_ui).
+        struct UiItem {
+            int kind = NS_UI_END;
+            std::string name;             // custom label / caption (empty = param name)
+            int index = -1;               // params[] or texts[] index
+            double min = 0, max = 0, step = 0; // optional overrides
+            int flags = 0;
+        };
+        std::vector<UiItem> ui;           // per-type layout (ordered)
     };
     struct Lib {
         // Resource declared by a plugin (optional symbol

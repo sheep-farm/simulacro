@@ -92,6 +92,10 @@ void Engine::resolvePlugins() {
 }
 
 void Engine::refreshPluginLabels() {
+    // The declarative in-node UI (nodesim_plugin_ui) needs vertical room: when
+    // the type has a layout, reserve rows in the body height so the strip
+    // never covers the ports. szH is the transient preferred size already used
+    // by the engine; UI rows only INCREASE it (never shrink existing prefs).
     for (auto& n : g.nodes) {
         if (n.type != NodeType::PLUGIN) {
             n.disp.clear();
@@ -104,9 +108,19 @@ void Engine::refreshPluginLabels() {
         n.szW = rt ? (float)rt->prefW : 0;
         n.szH = rt ? (float)rt->prefH : 0;
         n.shape = rt ? rt->shape : 0;
+        if (!rt || rt->ui.empty()) continue;
+        // rows needed by the declared layout (kinds that occupy one row each)
+        float rows = 0;
+        for (const auto& it : rt->ui) {
+            if (it.kind == NS_UI_END) break;
+            if (it.kind == NS_UI_VSPACE) continue; // empty line (already counted)
+            rows += 1.0f;
+        }
+        const float needH = 18.0f * rows + 10.0f;   // NODE_ROW_H ~ world units
+        if (n.szH < needH) n.szH = needH;
+        if (n.szW < 200.0f) n.szW = 200.0f;         // roomy inline widgets
     }
 }
-
 std::string Engine::initialBlob(const Node& n) { return g.initialBlob(n, plugins); }
 
 void Engine::refreshPstate(Node& n) {
