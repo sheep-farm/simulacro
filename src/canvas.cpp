@@ -89,6 +89,12 @@ GraphCanvas::GraphCanvas(wxWindow* parent, Engine* engine)
         }
         ev.Skip();
     });
+#endif
+    Bind(wxEVT_ERASE_BACKGROUND, &GraphCanvas::onEraseBackground, this);
+    Bind(wxEVT_MOUSE_CAPTURE_LOST, &GraphCanvas::onCaptureLost, this);
+}
+
+#if defined(SIMULACRO_NODE_UI)
 void GraphCanvas::eventToImGui(const wxMouseEvent& ev) {
     if (!imui::enabled()) return;
     imui::mouseMove(ev.GetPosition().x, ev.GetPosition().y);
@@ -98,12 +104,7 @@ bool GraphCanvas::widgetHit(const wxPoint& p) const {
         if (p.x >= b.x && p.x < b.x + b.w && p.y >= b.y && p.y < b.y + b.h) return true;
     return false;
 }
-
-
 #endif // SIMULACRO_NODE_UI
-    Bind(wxEVT_ERASE_BACKGROUND, &GraphCanvas::onEraseBackground, this);
-    Bind(wxEVT_MOUSE_CAPTURE_LOST, &GraphCanvas::onCaptureLost, this);
-}
 // Applies one parameter change through the plugin ABI; engine side stays the
 // same as the property grid path (checkpoint per gesture — see onLeftUp).
 bool GraphCanvas::applyParam(Node* n, int i, double v) {
