@@ -38,6 +38,49 @@ extern bool g_openScopes;      // --open-scopes (GUI)
 namespace {
 wxString T(const char* s) { return wxString::FromUTF8(i18n::text(s)); }
 
+// Ícones de alinhamento desenhados (wxArtProvider não tem stock "align"):
+// a linha-GUIA clara é a referência e as barras são os nós encostados nela
+// (larguras diferentes para lembrar que alinha a CAIXA, não o centro).
+static wxBitmap alignIcon(GraphCanvas::Align mode) {
+    wxBitmap bmp(20, 20, 32);
+    bmp.UseAlpha();
+    wxMemoryDC dc;
+    dc.SelectObject(bmp);
+    dc.SetBackground(wxBrush(wxColour(0, 0, 0, 0)));
+    dc.Clear();
+    auto bar = [&](int x, int y, int w, int h, const wxColour& c) {
+        dc.SetPen(wxPen(c, 1, wxPENSTYLE_TRANSPARENT));
+        dc.SetBrush(wxBrush(c));
+        dc.DrawRectangle(x, y, w, h);
+    };
+    const wxColour guide(240, 240, 248);
+    const wxColour node(150, 150, 160);
+    switch (mode) {
+        case GraphCanvas::Align::Left:
+            bar(4, 2, 2, 16, guide); bar(7, 4, 10, 5, node); bar(7, 11, 6, 5, node);
+            break;
+        case GraphCanvas::Align::HCenter:
+            bar(9, 2, 2, 16, guide); bar(5, 4, 10, 5, node); bar(7, 11, 6, 5, node);
+            break;
+        case GraphCanvas::Align::Right:
+            bar(14, 2, 2, 16, guide); bar(4, 4, 10, 5, node); bar(8, 11, 6, 5, node);
+            break;
+        case GraphCanvas::Align::Top:
+            bar(2, 4, 16, 2, guide); bar(4, 7, 5, 10, node); bar(11, 7, 6, 10, node);
+            break;
+        case GraphCanvas::Align::VCenter:
+            bar(2, 9, 16, 2, guide); bar(4, 5, 5, 10, node); bar(11, 7, 6, 6, node);
+            break;
+        case GraphCanvas::Align::Bottom:
+            bar(2, 14, 16, 2, guide); bar(4, 4, 5, 10, node); bar(11, 4, 6, 10, node);
+            break;
+        default:
+            break;
+    }
+    dc.SelectObject(wxNullBitmap);
+    return bmp;
+}
+
 enum {
     ID_NEW = wxID_HIGHEST + 1,
     ID_OPEN, ID_SAVE, ID_SAVE_AS, ID_SAVE_INITIAL, ID_EXPORT_SCOPE,
@@ -302,6 +345,22 @@ void MainFrame::buildToolbar() {
     tb->AddSeparator();
     tb->AddTool(ID_UNDO, T("Undo"), icon(wxART_UNDO), T("Undo"));
     tb->AddTool(ID_REDO, T("Redo"), icon(wxART_REDO), T("Redo"));
+    tb->AddSeparator();
+    // Alinhamento da seleção (os MESMOS IDs do menu Edit > Align: um Bind só
+    // serve à barra e ao menu; ícones só, com tooltip — a barra tem wxTB_TEXT
+    // e 6 rótulos encheriam).
+    tb->AddTool(ID_ALIGN_L, "", alignIcon(GraphCanvas::Align::Left),
+                T("Align left") + " (Ctrl+Shift+L)");
+    tb->AddTool(ID_ALIGN_HC, "", alignIcon(GraphCanvas::Align::HCenter),
+                T("Align horizontal centers") + " (Ctrl+Shift+H)");
+    tb->AddTool(ID_ALIGN_R, "", alignIcon(GraphCanvas::Align::Right),
+                T("Align right") + " (Ctrl+Shift+R)");
+    tb->AddTool(ID_ALIGN_T, "", alignIcon(GraphCanvas::Align::Top),
+                T("Align top") + " (Ctrl+Shift+T)");
+    tb->AddTool(ID_ALIGN_VC, "", alignIcon(GraphCanvas::Align::VCenter),
+                T("Align vertical centers") + " (Ctrl+Shift+V)");
+    tb->AddTool(ID_ALIGN_B, "", alignIcon(GraphCanvas::Align::Bottom),
+                T("Align bottom") + " (Ctrl+Shift+B)");
     tb->AddSeparator();
     tb->AddTool(ID_SIM_TOGGLE, T("Start"), icon(wxART_GO_FORWARD), T("Start/Pause"));
     tb->AddTool(ID_SIM_STEP, T("Step"), icon(wxART_GO_DOWN), T("Step"));
