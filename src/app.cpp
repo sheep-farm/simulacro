@@ -337,7 +337,7 @@ void MainFrame::buildToolbar() {
     // abre o menu (SetDropdownMenu) e o clique no CORPO também abre (o Bind
     // do ID_ALIGN_DD faz PopupMenu na posição da tool). Os itens reusam os
     // IDs do menu Edit > Align.
-    tb->AddTool(ID_ALIGN_DD, "", alignIcon(), T("Align"), wxITEM_DROPDOWN);
+    tb->AddTool(ID_ALIGN_DD, T("Align"), alignIcon(), T("Align"), wxITEM_DROPDOWN);
     tb->SetDropdownMenu(ID_ALIGN_DD, makeAlignMenu());
     tb->AddSeparator();
     tb->AddTool(ID_SIM_TOGGLE, T("Start"), icon(wxART_GO_FORWARD), T("Start/Pause"));
