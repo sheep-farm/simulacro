@@ -38,45 +38,26 @@ extern bool g_openScopes;      // --open-scopes (GUI)
 namespace {
 wxString T(const char* s) { return wxString::FromUTF8(i18n::text(s)); }
 
-// Ícones de alinhamento desenhados (wxArtProvider não tem stock "align"):
-// a linha-GUIA clara é a referência e as barras são os nós encostados nela
-// (larguras diferentes para lembrar que alinha a CAIXA, não o centro).
-static wxBitmap alignIcon(GraphCanvas::Align mode) {
+// Ícone do botão Align (dropdown), estilo Figma: retângulos CONTORNADOS de
+// traço fino (objetos), sem preenchimento, com a linha-guia fina no eixo
+// central atravessando tudo — monocromático, leve, 20x20 com alpha.
+static wxBitmap alignIcon() {
     wxBitmap bmp(20, 20, 32);
     bmp.UseAlpha();
     wxMemoryDC dc;
     dc.SelectObject(bmp);
     dc.SetBackground(wxBrush(wxColour(0, 0, 0, 0)));
     dc.Clear();
-    auto bar = [&](int x, int y, int w, int h, const wxColour& c) {
-        dc.SetPen(wxPen(c, 1, wxPENSTYLE_TRANSPARENT));
-        dc.SetBrush(wxBrush(c));
-        dc.DrawRectangle(x, y, w, h);
-    };
-    const wxColour guide(240, 240, 248);
-    const wxColour node(150, 150, 160);
-    switch (mode) {
-        case GraphCanvas::Align::Left:
-            bar(4, 2, 2, 16, guide); bar(7, 4, 10, 5, node); bar(7, 11, 6, 5, node);
-            break;
-        case GraphCanvas::Align::HCenter:
-            bar(9, 2, 2, 16, guide); bar(5, 4, 10, 5, node); bar(7, 11, 6, 5, node);
-            break;
-        case GraphCanvas::Align::Right:
-            bar(14, 2, 2, 16, guide); bar(4, 4, 10, 5, node); bar(8, 11, 6, 5, node);
-            break;
-        case GraphCanvas::Align::Top:
-            bar(2, 4, 16, 2, guide); bar(4, 7, 5, 10, node); bar(11, 7, 6, 10, node);
-            break;
-        case GraphCanvas::Align::VCenter:
-            bar(2, 9, 16, 2, guide); bar(4, 5, 5, 10, node); bar(11, 7, 6, 6, node);
-            break;
-        case GraphCanvas::Align::Bottom:
-            bar(2, 14, 16, 2, guide); bar(4, 4, 5, 10, node); bar(11, 4, 6, 10, node);
-            break;
-        default:
-            break;
-    }
+    const wxColour ink(230, 230, 240);
+    // guia central: 1px, altura toda
+    dc.SetPen(wxPen(ink, 1));
+    dc.DrawLine(10, 1, 10, 18);
+    // objetos: contorno 1px, transparentes por dentro (a guia aparece)
+    dc.SetBrush(wxBrush(wxColour(0, 0, 0, 0), wxBRUSHSTYLE_TRANSPARENT));
+    // objeto A: 13x6 centrado no eixo
+    dc.DrawRectangle(3, 3, 13, 6);
+    // objeto B: 10x5 centrado no eixo
+    dc.DrawRectangle(5, 12, 10, 5);
     dc.SelectObject(wxNullBitmap);
     return bmp;
 }
@@ -356,8 +337,7 @@ void MainFrame::buildToolbar() {
     // abre o menu (SetDropdownMenu) e o clique no CORPO também abre (o Bind
     // do ID_ALIGN_DD faz PopupMenu na posição da tool). Os itens reusam os
     // IDs do menu Edit > Align.
-    tb->AddTool(ID_ALIGN_DD, "", alignIcon(GraphCanvas::Align::HCenter),
-                T("Align"), wxITEM_DROPDOWN);
+    tb->AddTool(ID_ALIGN_DD, "", alignIcon(), T("Align"), wxITEM_DROPDOWN);
     tb->SetDropdownMenu(ID_ALIGN_DD, makeAlignMenu());
     tb->AddSeparator();
     tb->AddTool(ID_SIM_TOGGLE, T("Start"), icon(wxART_GO_FORWARD), T("Start/Pause"));
