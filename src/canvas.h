@@ -52,6 +52,22 @@ public:
     void pasteClipboard();
     void duplicateSelection();
 
+    // Estado de View para persistência de sessão (ui.ini): leitura da
+    // câmera e aplicação ATRASADA — a sessão salva vence o fit de carga
+    // UMA vez (o pending é consumido no primeiro centerOnGraph do
+    // frameDelay_; depois disso o zoom/câmera são livres do usuário).
+    void viewState(float& zoom, float& camX, float& camY) const {
+        zoom = zoom_;
+        camX = camX_;
+        camY = camY_;
+    }
+    void setPendingView(float zoom, float camX, float camY) {
+        pendZoom_ = zoom;
+        pendCamX_ = camX;
+        pendCamY_ = camY;
+        pendView_ = true;
+    }
+
     void zoomBy(float factor, wxPoint anchor);
     void zoomReset();
     void centerOnGraph();
@@ -182,6 +198,9 @@ private:
 
     // canvas-click do controle (NS_PLUGIN_ACTS): "pulsa" 1 na pressão, 0 no soltado
     bool kbActHeld_ = false; // Space do HOLD via teclado está pressionado
+    bool pendView_ = false;  // view da sessão salva a aplicar pós-fit
+    void consumePendingView(); // qualquer fit consome a view da sessão
+    float pendZoom_ = 1, pendCamX_ = 0, pendCamY_ = 0;
     int actNode_ = -1;
     int actParam_ = -1;
 

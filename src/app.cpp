@@ -16,6 +16,10 @@
 #include "version.h"
 
 #include <wx/artprov.h>
+#include <wx/filename.h>
+
+#include <cstdlib>
+#include <fstream>
 #include <wx/filedlg.h>
 #include <wx/filename.h>
 #include <wx/statusbr.h>
@@ -81,10 +85,53 @@ wxIMPLEMENT_APP_NO_MAIN(SimulacroApp);
 
 // ------------------------------------------------------------------ M a i n
 
+// ------------------------------------------------------------- sessão
+// ui.ini em ~/.local/state/nodesim (contrato XDG do README): pares
+// chave=valor; a perspectiva AUI é UMA linha (contém ; e = — o split é no
+// PRIMEIRO '='). Salvo ao fechar; restaurado no boot.
+static wxString sessionPath() {
+    const char* x = std::getenv("XDG_STATE_HOME");
+    wxString dir = x && *x ? wxString::FromUTF8(x) : wxGetHomeDir() + "/.local/state";
+    return dir + "/nodesim/ui.ini";
+}
+
+static std::map<wxString, wxString> readSession() {
+    std::map<wxString, wxString> out;
+    std::ifstream f(std::string(sessionPath().ToUTF8()));
+    if (!f) return out;
+    std::string line;
+    while (std::getline(f, line)) {
+        if (line.empty() || line[0] == '#') continue;
+        const size_t eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        out[wxString::FromUTF8(line.substr(0, eq))] =
+            wxString::FromUTF8(line.substr(eq + 1));
+    }
+    return out;
+}
+
+static void writeSession(const std::vector<std::pair<wxString, wxString>>& kv) {
+    const wxString path = sessionPath();
+    wxFileName::Mkdir(wxFileName(path).GetPath(), 0755, wxPATH_MKDIR_FULL);
+    std::ofstream f(std::string(path.ToUTF8()));
+    if (!f) return;
+    for (const auto& [k, v] : kv)
+        f << std::string(k.ToUTF8()) << "=" << std::string(v.ToUTF8()) << "\n";
+}
+
 MainFrame::MainFrame()
     : wxFrame(nullptr, wxID_ANY, "simulacro", wxDefaultPosition, wxSize(1280, 780)),
       timer_(this) {
     themeInit();
+
+    // sessão salva: o IDIOMA vem antes de buildMenu (os menus nascem no
+    // idioma restaurado; --lang do CLI tem precedência sobre o ui.ini).
+    const auto sess = readSession();
+    if (std::getenv("NODESIM_LANG") == nullptr) {
+        const auto it = sess.find("lang");
+        if (it != sess.end() && it->second == "pt-BR")
+            i18n::setLang(i18n::Lang::PT_BR);
+    }
 
     CreateStatusBar(3);
     const int widths[] = {-1, 240, 280};
@@ -97,6 +144,10 @@ MainFrame::MainFrame()
     buildToolbar();
     buildLayout();
     bindUi();
+
+    // sessão salva: geometria/panes/toggles/câmera pendente (antes do
+    // Update() do AUI e antes do fit — a câmera restaurada vence o fit).
+    restoreSession(sess);
 
     aui_.Update();
     applyTheme();
@@ -629,8 +680,69 @@ void MainFrame::onClose(wxCloseEvent& ev) {
         ev.Veto();
         return;
     }
+    saveSession(); // estado da sessão (panes/view/idioma) ao sair
     timer_.Stop();
     ev.Skip();
+}
+
+void MainFrame::restoreSession(const std::map<wxString, wxString>& s) {
+    // geometria da janela (quando não maximizada, o par x/y/w/h vale)
+    auto num = [&](const char* k, double* v) {
+        const auto it = s.find(k);
+        return it != s.end() && it->second.ToDouble(v);
+    };
+    double w, h, x, y, max;
+    if (num("winw", &w) && num("winh", &h) && num("winx", &x) && num("winy", &y) &&
+        num("max", &max)) {
+        if (max < 0.5) SetSize((int)x, (int)y, (int)w, (int)h);
+        if (max > 0.5) Maximize(true);
+    }
+    // perspectiva AUI (nomes de pane atuais: palette/props/scopes/canvas)
+    const auto persp = s.find("persp");
+    if (persp != s.end() && !persp->second.empty())
+        aui_.LoadPerspective(persp->second, false); // Update() vem no ctor
+    // toggles de View (só aplica o que existe no arquivo)
+    if (s.count("values")) {
+        double v = 0;
+        if (num("values", &v)) canvas_->setShowValues(v > 0.5);
+    }
+    if (s.count("grid")) {
+        double v = 0;
+        if (num("grid", &v)) canvas_->setGrid(v > 0.5);
+    }
+    if (s.count("curve")) {
+        double v = 0;
+        if (num("curve", &v)) canvas_->setCurveWires(v > 0.5);
+    }
+    // câmera (pendente: vence o fit de carga uma vez)
+    double z, cx, cy;
+    if (num("zoom", &z) && num("camx", &cx) && num("camy", &cy))
+        canvas_->setPendingView((float)z, (float)cx, (float)cy);
+    updateChecks(); // checks do menu condizem com o estado restaurado
+}
+
+void MainFrame::saveSession() {
+    std::vector<std::pair<wxString, wxString>> kv;
+    kv.emplace_back("persp", aui_.SavePerspective());
+    const bool max = IsMaximized();
+    kv.emplace_back("max", max ? "1" : "0");
+    if (!max) {
+        kv.emplace_back("winx", wxString::Format("%d", GetPosition().x));
+        kv.emplace_back("winy", wxString::Format("%d", GetPosition().y));
+        kv.emplace_back("winw", wxString::Format("%d", GetSize().x));
+        kv.emplace_back("winh", wxString::Format("%d", GetSize().y));
+    }
+    kv.emplace_back("lang",
+                    i18n::lang() == i18n::Lang::PT_BR ? "pt-BR" : "en");
+    float z, cx, cy;
+    canvas_->viewState(z, cx, cy);
+    kv.emplace_back("zoom", wxString::Format("%.6f", (double)z));
+    kv.emplace_back("camx", wxString::Format("%.1f", (double)cx));
+    kv.emplace_back("camy", wxString::Format("%.1f", (double)cy));
+    kv.emplace_back("values", canvas_->showValues() ? "1" : "0");
+    kv.emplace_back("grid", canvas_->grid() ? "1" : "0");
+    kv.emplace_back("curve", canvas_->curveWires() ? "1" : "0");
+    writeSession(kv);
 }
 
 void MainFrame::onUndo(wxCommandEvent&) {

@@ -8,6 +8,7 @@
 #pragma once
 
 #include <wx/wx.h>
+#include <map>
 #include <wx/aui/aui.h>
 #include <wx/timer.h>
 
@@ -59,6 +60,11 @@ private:
     void onSelectAll(wxCommandEvent&);
     void onGroup(wxCommandEvent&);
     void onAlign(wxCommandEvent&);
+    // Sessão (ui.ini em ~/.local/state/nodesim): pane layout, geometria,
+    // câmera do canvas e toggles de View — salvo ao FECHAR, restaurado no
+    // boot (o idioma vem primeiro no ctor, antes do buildMenu).
+    void saveSession();
+    void restoreSession(const std::map<wxString, wxString>& s);
     void onUngroup(wxCommandEvent&);
     void onAddKey(const std::string& key);
     void onAddScript(wxCommandEvent&);

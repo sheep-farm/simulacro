@@ -68,10 +68,23 @@ void GraphCanvas::requestFit() {
     frameDelay_ = 12;   // paints until re-fit (pane layout settles)
 }
 
+void GraphCanvas::consumePendingView() {
+    // A view salva da sessão vence o fit UMA vez (qualquer fit a consome:
+    // frameDelay, onSize, ensureInView, menu). Grafo vazio descarta-a — ela
+    // pertencia a um grafo que não está mais na tela.
+    if (!pendView_) return;
+    pendView_ = false;
+    if (e_->g.nodes.empty()) return;
+    zoom_ = std::max(0.15f, std::min(4.0f, pendZoom_));
+    camX_ = pendCamX_;
+    camY_ = pendCamY_;
+}
+
 void GraphCanvas::centerOnGraph() {
     if (e_->g.nodes.empty()) {
         zoom_ = 1;
         camX_ = camY_ = 0;
+        consumePendingView();
         Refresh(false);
         return;
     }
@@ -93,6 +106,7 @@ void GraphCanvas::centerOnGraph() {
     lastFitW_ = (float)sz.x;
     lastFitH_ = (float)sz.y;
     if (fitRound_ == 0) fitRound_ = 1; // abre a cadeia dos refits automáticos
+    consumePendingView();              // sessão salva vence este fit (1x)
     Refresh(false);
 }
 

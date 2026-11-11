@@ -133,7 +133,15 @@ void GraphCanvas::applyText(Node* n, int i, const std::string& s) {
 
 void GraphCanvas::onPaint(wxPaintEvent&) {
     wxAutoBufferedPaintDC dc(this);
-    if (frameDelay_ > 0 && --frameDelay_ == 0) centerOnGraph();
+    if (frameDelay_ > 0 && --frameDelay_ == 0) {
+        centerOnGraph();
+        if (pendView_) { // view da sessão salva vence o fit de carga
+            zoom_ = std::max(0.15f, std::min(4.0f, pendZoom_));
+            camX_ = pendCamX_;
+            camY_ = pendCamY_;
+            pendView_ = false;
+        }
+    }
     const wxSize sz = GetClientSize();
     if (bmp_.ensure(sz.x, sz.y)) {
         if (bmp_.rendererRebuilt()) {       // atlas/renderer pair died with the panel
