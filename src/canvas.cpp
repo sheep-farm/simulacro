@@ -79,6 +79,7 @@ GraphCanvas::GraphCanvas(wxWindow* parent, Engine* engine)
     Bind(wxEVT_MOUSEWHEEL, &GraphCanvas::onMouseWheel, this);
     Bind(wxEVT_LEFT_DCLICK, &GraphCanvas::onDoubleClick, this);
     Bind(wxEVT_KEY_DOWN, &GraphCanvas::onKeyDown, this);
+    Bind(wxEVT_KEY_UP, &GraphCanvas::onKeyUp, this);
 #if defined(SIMULACRO_NODE_UI)
     Bind(wxEVT_CHAR, [this](wxKeyEvent& ev) {
         if (imui::wantsTextInputNow()) {
@@ -156,43 +157,12 @@ void GraphCanvas::onPaint(wxPaintEvent&) {
     }
 }
 
-void GraphCanvas::onSize(wxSizeEvent& ev) {
-    // Refit when a load's follow-up pane resize is substantial (max 3 rounds):
-    // loadFile fits with the stale pane size, so load-time graphs {"caíam" da
-    // view} quando o AUI terminava de assentar. Refit IMEDIATO: em repouso
-    // (PAUSED) não chegam mais paints para despachar um fit adiado.
-    if (fitRound_ >= 1 && fitRound_ < 3 && lastFitW_ > 1 && lastFitH_ > 1) {
-        const wxSize sz = GetClientSize();
-        const float dw = std::fabs((float)sz.x - lastFitW_) / std::max(1.0f, lastFitW_);
-        const float dh = std::fabs((float)sz.y - lastFitH_) / std::max(1.0f, lastFitH_);
-        if (dw > 0.25f || dh > 0.25f) {
-            centerOnGraph();
-            if (fitRound_ < 3) ++fitRound_;
-            frameDelay_ = 0;
-            Refresh(false);
-            ev.Skip();
-            return;
-        }
-    }
-    Refresh(false);
-    ev.Skip();
-}
-
 void GraphCanvas::onCaptureLost(wxMouseCaptureLostEvent&) {
     pending_ = false;
     moving_ = false;
     rubber_ = false;
     panning_ = false;
-    if (actNode_ >= 0 && actParam_ >= 0) { // solto o botão se perdermos captura
-        if (Node* nRel = e_->g.find(actNode_)) {
-            const Engine::ClickAct act = e_->clickAct(*nRel);
-            if (act.kind == NS_ACT_HOLD) e_->runClickAct(*nRel, act, false);
-            if (onParamEdited) onParamEdited(actNode_);
-        }
-        actNode_ = -1;
-        actParam_ = -1;
-        Refresh(false);
-    }
+    endActPress(false); // perdeu a captura: solta o botão do controle
 }
 
 void GraphCanvas::render() {
@@ -537,22 +507,10 @@ void GraphCanvas::onLeftUp(wxMouseEvent& ev) {
         imui::mouseButton(0, false);
     }
 #endif
-    // fim da pressão do controle no canvas (NS_PLUGIN_ACTS / HOLD):
-    // encerra TAMBÉM o estado de arrasto aberto no down (dragging_=true),
-    // senão o PRÓXIMO clique no botão cai fora ("if (dragging_...) return")
-    if (actNode_ >= 0 && actParam_ >= 0) {
-        dragging_ = false;
-        if (HasCapture()) ReleaseMouse();   // captura aberta no down
-        if (Node* nRel = e_->g.find(actNode_)) {
-            const Engine::ClickAct act = e_->clickAct(*nRel);
-            if (act.kind == NS_ACT_HOLD) e_->runClickAct(*nRel, act, false);
-            if (onParamEdited) onParamEdited(actNode_);
-        }
-        actNode_ = -1;
-        actParam_ = -1;
-        Refresh(false);
-        return;
-    }
+    // Fim da pressão do controle (HOLD): encerra TAMBÉM o estado de arrasto
+    // aberto no down, senão o PRÓXIMO clique no botão cai fora. Em
+    // canvas_acts.cpp.
+    if (endActPress(true)) return;
 
     if (!dragging_) return;
     dragging_ = false;
@@ -598,471 +556,7 @@ std::string GraphCanvas::oneLine(const std::string& s) const {
     return o;
 }
 
-#if defined(SIMULACRO_NODE_WINDOW)
-// ---- fase 4: node = ImGui window (chrome) ----
-// Theână SDL renderer keeps the *data* painters (body ink, port labels/values,
-// sparklines, plugin draw hooks) and the wires: they draw exactly as before.
-// TheImGui layer adds the *chrome*: a rounded window frame with the type ring
-// color, the title bar and the title text, the hover/_selection outline, and
-// the pending wire in the foreground draw list (which passes above nodes).
-// Custom-shape plugins (NS_SHAPE_CUSTOM) are skipped: their whole silhouette
-// is authored by the plugin.
-void GraphCanvas::drawNodeChrome(const Node& n) {
-    FRect wb = nodeBox(n);
-    Vec2 tl = w2s({wb.x, wb.y}), br = w2s({wb.x + wb.w, wb.y + wb.h});
-    if (br.x < 0 || br.y < 0 || tl.x > bmp_.width() || tl.y > bmp_.height()) return;
-    ImDrawList* dl = ImGui::GetBackgroundDrawList();
-    const bool selected = sel_.count(n.id) > 0;
-    Uint8 cr = 255, cg = 255, cb = 255;
-    if (n.type == NodeType::PLUGIN) {
-        float rgb[3];
-        if (e_->plugins.colorOf(n.plugin, rgb)) {
-            cr = (Uint8)rgb[0]; cg = (Uint8)rgb[1]; cb = (Uint8)rgb[2];
-        } else {
-            ringColor(n.type, cr, cg, cb);
-        }
-    } else {
-        ringColor(n.type, cr, cg, cb);
-    }
-    const int titleH = std::max(2, (int)(NODE_TITLE_H * zoom_));
-    const float rounding = 6.0f;
 
-    // hover/selection outline outside the window
-    if (selected || n.id == hoverNode_) {
-        const ImVec2 o1(tl.x - (selected ? 3.0f : 2.0f), tl.y - (selected ? 3.0f : 2.0f));
-        const ImVec2 o2(br.x + (selected ? 3.0f : 2.0f), br.y + (selected ? 3.0f : 2.0f));
-        dl->AddRect(o1, o2, selected ? IM_COL32(kUi.strong.r, kUi.strong.g,
-                                       kUi.strong.b, 255)
-                                     : IM_COL32((int)(kUi.strong.r * .75f),
-                                                (int)(kUi.strong.g * .75f),
-                                                (int)(kUi.strong.b * .75f), 255),
-                    rounding);
-    }
-    // dark title bar painted over the SDL one (window header feel)
-    const SDL_Color tbBg = mixColor({cr, cg, cb, 255}, kUi.panel, 0.72f);
-    dl->AddRectFilled(ImVec2(tl.x, tl.y), ImVec2(br.x, tl.y + titleH),
-                      IM_COL32(tbBg.r, tbBg.g, tbBg.b, 255), rounding,
-                      ImDrawFlags_RoundCornersTop);
-#if defined(SIMULACRO_NODE_WINDOW_OVERWRITE_FRAME)
-    // (opt-in) also re-paint the window border in ImGui to win over the SDL one
-    dl->AddRect(ImVec2(tl.x, tl.y), ImVec2(br.x, br.y),
-                IM_COL32(cr, cg, cb, 255), rounding);
-#else
-    (void)cr;
-#endif
-    if (zoom_ >= 0.6f) {
-        const std::string ntitle = e_->nodeLabel(n);
-        const ImU32 fg = contrastColor(tbBg).r;
-        dl->AddText(ImVec2(tl.x + 5, tl.y + 3), fg, ntitle.c_str());
-    }
-}
-
-void GraphCanvas::drawAllFrameChrome() {
-    if (!ImGui::GetCurrentContext()) return;
-    for (const auto& n : e_->g.nodes) {
-        if (nodeHidden(n.id)) continue;
-        if (n.type == NodeType::PLUGIN && n.shape == NS_SHAPE_CUSTOM) continue;
-        drawNodeChrome(n);
-    }
-}
-
-// Pending wire in the *foreground* draw list: passes above node windows.
-void GraphCanvas::drawPendingIm() {
-    if (!pending_ || !ImGui::GetCurrentContext()) return;
-    Vec2 p1{0, 0}, d1{1, 0}, p2 = mouseWorld_, d2{-1, 0};
-    const Node* n = e_->g.find(pendingFrom_);
-    if (n) {
-        if (pendingInput_) {
-            Vec2 wp = inPort(*n, pendingPort_);
-            p2 = w2s(wp);
-            Vec2 po = inDir(*n, pendingPort_);
-            d2 = {-po.x, -po.y};
-            Vec2 to{p2.x - mouse_.x, p2.y - mouse_.y};
-            float l = std::sqrt(to.x * to.x + to.y * to.y);
-            d1 = l > 0.001f ? Vec2{to.x / l, to.y / l} : Vec2{1, 0};
-        } else {
-            Vec2 wp = outPort(*n, pendingPort_);
-            p1 = w2s(wp);
-            d1 = outDir(*n, pendingPort_);
-            Vec2 from{p1.x - mouse_.x, p1.y - mouse_.y};
-            float l = std::sqrt(from.x * from.x + from.y * from.y);
-            d2 = l > 0.001f ? Vec2{from.x / l, from.y / l} : Vec2{-1, 0};
-        }
-    }
-    // same cubic as core wirePoint(): u = 1 - t
-    const float off = std::max(30.0f, std::hypot(p2.x - p1.x, p2.y - p1.y) * 0.5f);
-    Vec2 u1 = d1, u2 = d2;
-    {
-        float l1 = std::hypot(d1.x, d1.y), l2 = std::hypot(d2.x, d2.y);
-        if (l1 > 0.001f) u1 = {d1.x / l1, d1.y / l1};
-        if (l2 > 0.001f) u2 = {d2.x / l2, d2.y / l2};
-    }
-    auto point = [&](float t) {
-        const float u = 1.0f - t;
-        return Vec2{
-            u * u * u * p1.x + 3 * u * u * t * (p1.x + u1.x * off) +
-                3 * u * t * t * (p2.x - u2.x * off) + t * t * t * p2.x,
-            u * u * u * p1.y + 3 * u * u * t * (p1.y + u1.y * off) +
-                3 * u * t * t * (p2.y - u2.y * off) + t * t * t * p2.y,
-        };
-    };
-    const ImU32 color =
-        IM_COL32(kUi.highlight.r, kUi.highlight.g, kUi.highlight.b, 255);
-    ImDrawList* dl = ImGui::GetForegroundDrawList();
-    if (curve_) {
-        const int N = 24;
-        Vec2 prev = p1;
-        for (int i = 1; i <= N; ++i) {
-            Vec2 q = point((float)i / N);
-            dl->AddLine(ImVec2(prev.x, prev.y), ImVec2(q.x, q.y), color, 2.0f);
-            prev = q;
-        }
-    } else {
-        dl->AddLine(ImVec2(p1.x, p1.y), ImVec2(p2.x, p2.y), color, 2.0f);
-    }
-}
-#endif // SIMULACRO_NODE_WINDOW
-
-#if defined(SIMULACRO_NODE_UI)
-// ---- ImGui widgets over/in-node (parameter editors of the selected node) ----
-// Drawn on top of the custom renderer; the UI that moves nodes/wires remains
-// custom. On scope/map views this layer never runs.
-//
-// Layout precedence (fase 3): the declarative in-node layout exported by the
-// plugin via `nodesim_plugin_ui` when present; otherwise the generic parameter
-// list (fase 2). Modes come from nodeui::mode(): `inner` (default) anchors the
-// strip inside the node body below the title, clipped to the node box; `below`
-// keeps the fase-1 rail under the node; `off` disables canvas editing.
-void GraphCanvas::drawNodeWidgets() {
-    if (!imui::enabled() || !ImGui::GetCurrentContext()) return;
-    if (nodeui::mode() == nodeui::Mode::Off) return;
-    const int id = singleSelection();
-    const Node* n = id >= 0 ? e_->g.find(id) : nullptr;
-    if (!n) return;
-    if (n->type != NodeType::PLUGIN) return;
-    auto* inst = n->pinst.get();
-    if (!inst) return;
-    const auto* rt = e_->typeOf(*n);
-    if (!rt) return;
-    const bool authored = !rt->ui.empty();
-    if (!authored && rt->params.empty()) return;
-    if (zoom_ < 0.45f) return;   // window tiny: editing is for the property grid
-
-    char win[40];
-    std::snprintf(win, sizeof win, "##params%d", id);
-    const FRect b = nodeBox(*n);
-    const float pad = 6.0f, labelW = 60.0f;
-    const float rowH = ImGui::GetFontSize() + ImGui::GetStyle().ItemSpacing.y * 0.5f;
-    const int rows = authored ? (int)rt->ui.size() : (int)rt->params.size();
-    // LED rows are visual chips, not widgets; they still take one row each.
-    float railH = (float)rows * rowH + 2 * pad + 4;
-
-    ImGuiWindowFlags flags =
-        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize |
-        ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
-        ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
-        ImGuiWindowFlags_NoBringToFrontOnFocus;
-
-    Vec2 pos = w2s({b.x, b.y + b.h});
-    float width = 196.0f;
-    float height = railH;
-    bool inner = false;
-    if (nodeui::mode() == nodeui::Mode::Inner) {
-        const Vec2 boxTl = w2s({b.x, b.y});
-        const float boxW = b.w * zoom_;
-        const float boxH = b.h * zoom_;
-        const float titleH = NODE_TITLE_H * zoom_;
-        const bool fits = boxW >= 118.0f && (boxH - titleH) >= rowH &&
-                          (authored || (int)rt->params.size() <= 3);
-        if (fits) {
-            inner = true;
-            pos = {boxTl.x, boxTl.y + titleH};
-            width = boxW;
-            height = boxH - titleH;
-        }
-    }
-
-    widgetBoxes_.clear();
-    widgetBoxes_.push_back({(int)pos.x, (int)pos.y, (int)width, (int)height});
-    ImGui::SetNextWindowPos(ImVec2(pos.x, pos.y));
-    ImGui::SetNextWindowSize(ImVec2(width, height));
-    if (!ImGui::Begin(win, nullptr, flags)) {
-        ImGui::End();
-        return;
-    }
-    const bool compact = inner && width < 150.0f;
-    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(4, 2));
-
-    auto displayName = [&](const PluginRegistry::Param* pr,
-                           const std::string& overrideName) {
-        if (!overrideName.empty()) return overrideName;
-        return pr ? pr->name : std::string();
-    };
-
-    // Generic/declarative row body: one widget per param (or Uint item).
-    auto rowStart = [&](const std::string& shownName) {
-        ImGui::SetCursorPosX(pad);
-        if (compact) {
-            ImGui::PushItemWidth(width - 2 * pad);
-        } else {
-            ImGui::TextUnformatted(shownName.c_str());
-            ImGui::SameLine(pad + labelW);
-            ImGui::PushItemWidth(width - labelW - 2 * pad);
-        }
-    };
-    auto rowHover = [&](const std::string& shownName) {
-        if (compact && ImGui::IsItemHovered()) ImGui::SetTooltip("%s", shownName.c_str());
-    };
-
-    for (int row = 0; row < rows; ++row) {
-        // Declarative-only leafs that open with no parameter binding.
-        if (authored) {
-            const auto& it = rt->ui[(size_t)row];
-            if (it.kind == NS_UI_END) break;
-            if (it.kind == NS_UI_LABEL) {
-                ImGui::SetCursorPosX(pad);
-                ImGui::TextUnformatted(it.name.c_str());
-                continue;
-            }
-            if (it.kind == NS_UI_VSPACE) {
-                ImGui::Dummy(ImVec2(0.0f, rowH));
-                continue;
-            }
-            if (it.kind == NS_UI_LED) {
-                const int idx = it.index;
-                const bool okBound =
-                    idx >= 0 && idx < (int)rt->params.size() &&
-                    rt->params[(size_t)idx].kind == NS_PARAM_BOOL;
-                const double v = okBound ? inst->callGetParam(inst->handle, idx) : 0.0;
-                const bool on = v > 0.5;
-                const ImVec2 c = ImGui::GetCursorScreenPos();
-                const float r = 5.0f;
-                ImGui::GetWindowDrawList()->AddCircleFilled(
-                    ImVec2(c.x + pad + r, c.y + rowH * 0.5f), r,
-                    on ? IM_COL32(kUi.ok.r, kUi.ok.g, kUi.ok.b, 255)
-                       : IM_COL32(kUi.weak.r, kUi.weak.g, kUi.weak.b, 255));
-                ImGui::Dummy(ImVec2(width - pad - r, rowH));
-                continue;
-            }
-        }
-
-        ImGui::PushID(row);
-        if (authored) {
-            // Declarative item with binding.
-            const auto& it = rt->ui[(size_t)row];
-            const bool isText = it.kind == NS_UI_TEXT;
-            if (isText) {
-                const std::string shown = it.name.empty()
-                                              ? (it.index < (int)rt->texts.size()
-                                                     ? rt->texts[(size_t)it.index]
-                                                     : std::string())
-                                              : it.name;
-                rowStart(shown);
-                char cur[512] = {0};
-                if (char* s = inst->callGetText(inst->handle, it.index)) {
-                    strncpy(cur, s, sizeof(cur) - 1);
-                    ::free(s);
-                }
-                ImGui::InputText("##tbl", cur, sizeof(cur));
-                const bool entered =
-                    ImGui::IsItemDeactivatedAfterEdit() || ImGui::IsItemEdited();
-                if (entered) {
-                    widgetNode_ = id;
-                    applyText((Node*)n, it.index, cur);
-                    Refresh(false);
-                }
-                rowHover(shown);
-                ImGui::PopItemWidth();
-                ImGui::PopID();
-                continue;
-            }
-            if (it.index < 0 || it.index >= (int)rt->params.size()) {
-                ImGui::PopID();
-                continue;  // loader validated but be defensive
-            }
-            const auto& pr = rt->params[(size_t)it.index];
-            const double cur = inst->callGetParam(inst->handle, it.index);
-            const std::string shownName = displayName(&pr, it.name);
-            switch (pr.kind) {
-                case NS_PARAM_BOOL: {
-                    rowStart(shownName);
-                    bool v = cur != 0.0;
-                    if (ImGui::Checkbox("##sw", &v)) {
-                        widgetNode_ = id;
-                        applyParam((Node*)n, it.index, v ? 1.0 : 0.0);
-                        Refresh(false);
-                    }
-                    rowHover(shownName);
-                    ImGui::PopItemWidth();
-                    break;
-                }
-                case NS_PARAM_ENUM: {
-                    std::vector<const char*> items;
-                    items.reserve(pr.choices.size());
-                    for (const auto& s : pr.choices) items.push_back(s.c_str());
-                    int idx = (int)std::lround(cur);
-                    if (idx < 0 || idx >= (int)items.size()) idx = 0;
-                    rowStart(shownName);
-                    if (ImGui::Combo("##combo", &idx, items.data(), (int)items.size())) {
-                        widgetNode_ = id;
-                        applyParam((Node*)n, it.index, (double)idx);
-                        Refresh(false);
-                    }
-                    rowHover(shownName);
-                    ImGui::PopItemWidth();
-                    break;
-                }
-                case NS_PARAM_INT: {
-                    int v = (int)std::lround(cur);
-                    rowStart(shownName);
-                    const double lo = it.min != 0 ? it.min : pr.min;
-                    const double hi = it.max != 0 ? it.max : pr.max;
-                    const bool rangeOk =
-                        std::isfinite(lo) && std::isfinite(hi) && hi > lo &&
-                        (hi - lo) <= 100000.0;
-                    bool changed = false;
-                    if (rangeOk) {
-                        changed = ImGui::SliderInt("##int", &v, (int)lo, (int)hi);
-                    } else {
-                        changed = ImGui::InputInt("##int", &v, 1, 100);
-                        if (std::isfinite(lo)) v = std::max(v, (int)lo);
-                        if (std::isfinite(hi)) v = std::min(v, (int)hi);
-                    }
-                    if (changed) {
-                        widgetNode_ = id;
-                        applyParam((Node*)n, it.index, (double)v);
-                        Refresh(false);
-                    }
-                    rowHover(shownName);
-                    ImGui::PopItemWidth();
-                    break;
-                }
-                default: {
-                    rowStart(shownName);
-                    const double lo = it.min != 0 ? it.min : pr.min;
-                    const double hi = it.max != 0 ? it.max : pr.max;
-                    const bool rangeOk =
-                        std::isfinite(lo) && std::isfinite(hi) && hi > lo &&
-                        (hi - lo) <= 1e6;
-                    bool changed = false;
-                    double out = cur;
-                    if (rangeOk) {
-                        float f = (float)cur;
-                        changed =
-                            ImGui::SliderFloat("##f", &f, (float)lo, (float)hi, "%.4f");
-                        out = (double)f;
-                    } else {
-                        ImGui::InputDouble("##num", &out, 0.0, 0.0, "%.6g");
-                        changed = ImGui::IsItemDeactivatedAfterEdit();
-                        if (std::isfinite(lo)) out = std::max(out, lo);
-                        if (std::isfinite(hi)) out = std::min(out, hi);
-                    }
-                    if (changed) {
-                        widgetNode_ = id;
-                        applyParam((Node*)n, it.index, out);
-                        Refresh(false);
-                    }
-                    rowHover(shownName);
-                    ImGui::PopItemWidth();
-                    break;
-                }
-            }
-            ImGui::PopID();
-            continue;
-        }
-
-        // Generic path (fase 2): one row per parameter.
-        const auto& pr = rt->params[(size_t)row];
-        const double cur = inst->callGetParam(inst->handle, row);
-        const std::string shownName = pr.name;
-        switch (pr.kind) {
-            case NS_PARAM_BOOL: {
-                rowStart(shownName);
-                bool v = cur != 0.0;
-                if (ImGui::Checkbox("##sw", &v)) {
-                    widgetNode_ = id;
-                    applyParam((Node*)n, row, v ? 1.0 : 0.0);
-                    Refresh(false);
-                }
-                rowHover(shownName);
-                ImGui::PopItemWidth();
-                break;
-            }
-            case NS_PARAM_ENUM: {
-                std::vector<const char*> items;
-                items.reserve(pr.choices.size());
-                for (const auto& s : pr.choices) items.push_back(s.c_str());
-                int idx = (int)std::lround(cur);
-                if (idx < 0 || idx >= (int)items.size()) idx = 0;
-                rowStart(shownName);
-                if (ImGui::Combo("##combo", &idx, items.data(), (int)items.size())) {
-                    widgetNode_ = id;
-                    applyParam((Node*)n, row, (double)idx);
-                    Refresh(false);
-                }
-                rowHover(shownName);
-                ImGui::PopItemWidth();
-                break;
-            }
-            case NS_PARAM_INT: {
-                int v = (int)std::lround(cur);
-                rowStart(shownName);
-                const double lo = pr.min, hi = pr.max;
-                const bool rangeOk =
-                    std::isfinite(lo) && std::isfinite(hi) && hi > lo &&
-                    (hi - lo) <= 100000.0;
-                bool changed = false;
-                if (rangeOk) {
-                    changed = ImGui::SliderInt("##int", &v, (int)lo, (int)hi);
-                } else {
-                    changed = ImGui::InputInt("##int", &v, 1, 100);
-                    if (std::isfinite(lo)) v = std::max(v, (int)lo);
-                    if (std::isfinite(hi)) v = std::min(v, (int)hi);
-                }
-                if (changed) {
-                    widgetNode_ = id;
-                    applyParam((Node*)n, row, (double)v);
-                    Refresh(false);
-                }
-                rowHover(shownName);
-                ImGui::PopItemWidth();
-                break;
-            }
-            default: {
-                rowStart(shownName);
-                const double lo = pr.min, hi = pr.max;
-                const bool rangeOk =
-                    std::isfinite(lo) && std::isfinite(hi) && hi > lo && (hi - lo) <= 1e6;
-                bool changed = false;
-                double out = cur;
-                if (rangeOk) {
-                    float f = (float)cur;
-                    changed =
-                        ImGui::SliderFloat("##f", &f, (float)lo, (float)hi, "%.4f");
-                    out = (double)f;
-                } else {
-                    ImGui::InputDouble("##num", &out, 0.0, 0.0, "%.6g");
-                    changed = ImGui::IsItemDeactivatedAfterEdit();
-                    if (std::isfinite(lo)) out = std::max(out, lo);
-                    if (std::isfinite(hi)) out = std::min(out, hi);
-                }
-                if (changed) {
-                    widgetNode_ = id;
-                    applyParam((Node*)n, row, out);
-                    Refresh(false);
-                }
-                rowHover(shownName);
-                ImGui::PopItemWidth();
-                break;
-            }
-        }
-        ImGui::PopID();
-    }
-    ImGui::PopStyleVar();
-    ImGui::End();
-}
-
-#endif // SIMULACRO_NODE_UI
 
 std::string GraphCanvas::portLabel(const Node& n, int port, bool input) const {
     if (n.pinst) {
@@ -1172,53 +666,10 @@ void GraphCanvas::onLeftDown(wxMouseEvent& ev) {
         return;
     }
 
-    // Canvas CLICK do controle (NS_PLUGIN_ACTS / additive ABI 14): o ato
-    // está DECLARADO pelo plugin; o host aperta/solta o param no corpo do
-    // nó. Sem arrasto do nó (controle de painel) e sem checkpoint de undo.
-    const int nidAct = nodeAt(mouseWorld_);
-    if (nidAct >= 0) {
-        if (const Node* nA = e_->g.find(nidAct)) {
-            const Engine::ClickAct act = e_->clickAct(*nA);
-            const FRect nbAct = nodeBox(*nA);
-            const bool face = act.inset > 0
-                                  ? mouseWorld_.x >= nbAct.x + act.inset &&
-                                        mouseWorld_.x <= nbAct.x + nbAct.w - act.inset &&
-                                        mouseWorld_.y >= nbAct.y + act.inset &&
-                                        mouseWorld_.y <= nbAct.y + nbAct.h - act.inset
-                                  : true; // inset 0 (plugins antigos): corpo inteiro
-            if (!face) {
-                // clique na MARGEM: comportamento padrão do nó (selecionar/
-                // arrastar). Não aperta o botão.
-                actNode_ = -1;
-                actParam_ = -1;
-            } else if (act.kind == NS_ACT_HOLD) {
-                actNode_ = nidAct;
-                actParam_ = act.param;
-                e_->runClickAct(*nA, act, true);
-                if (onParamEdited) onParamEdited(nidAct);
-                if (!add) {
-                    sel_.clear();
-                    selWires_.clear();
-                    sel_.insert(nidAct);
-                }
-                notifySelection();
-                Refresh(false);
-                return;
-            }
-            if (act.kind == NS_ACT_TOGGLE) {
-                e_->toggleClickAct(*nA, act);
-                if (onParamEdited) onParamEdited(nidAct);
-                if (!add) {
-                    sel_.clear();
-                    selWires_.clear();
-                    sel_.insert(nidAct);
-                }
-                notifySelection();
-                Refresh(false);
-                return;
-            }
-        }
-    }
+    // Canvas CLICK do controle (NS_PLUGIN_ACTS / ABI 14 aditivo): aperta/
+    // solta/alterna o param no corpo do nó (sem arrasto, sem checkpoint);
+    // a margem interna segue o comportamento normal do nó. Em canvas_acts.cpp.
+    if (beginActPress(mouseWorld_, add)) return;
 
     const int gid = groupHeaderAt(mouseWorld_);
     if (gid >= 0) {
@@ -1489,8 +940,25 @@ void GraphCanvas::onMouseWheel(wxMouseEvent& ev) {
 #endif
     const int rot = ev.GetWheelRotation();
     if (!rot) return;
-    const float factor = std::pow(1.12f, rot / 120.0f);
-    zoomBy(factor, ev.GetPosition());
+    // "notch" da roda (±1 no mouse) ou frações acumuladas (trackpad suave)
+    const float notch = (float)rot / std::max(1.0f, (float)ev.GetWheelDelta());
+    if (ev.ControlDown() || ev.CmdDown()) {
+        // Ctrl+scroll: zoom no cursor (o zoom que antes era o scroll solto)
+        zoomBy(std::pow(1.12f, notch), ev.GetPosition());
+        return;
+    }
+    // scroll = PAN da área de desenho (estilo mapa: rola para onde vai a
+    // vista). Eixo horizontal da roda/trackpad pan horizontal; Shift+vertical
+    // também faz horizontal (fallback para quem não tem gesto horizontal).
+    const float px = notch * 48.0f; // px de tela por notch
+    float dx = 0, dy = 0;
+    if (ev.GetWheelAxis() == wxMOUSE_WHEEL_HORIZONTAL || ev.ShiftDown())
+        dx = px;
+    else
+        dy = -px; // scroll up (rot>0) = vista para cima
+    camX_ += dx / zoom_;
+    camY_ += dy / zoom_;
+    Refresh(false);
 }
 
 void GraphCanvas::zoomBy(float factor, wxPoint anchor) {
@@ -1503,77 +971,6 @@ void GraphCanvas::zoomBy(float factor, wxPoint anchor) {
 
 void GraphCanvas::zoomReset() {
     centerOnGraph();
-}
-
-void GraphCanvas::ensureInView() {
-    // Reflexo da carga: quando TODOS os nós estão fora da área visível após
-    // os panes assentarem, refit (limitado a 3 rodadas; não afeta o zoom do
-    // usuário quando eles estão na tela).
-    if (fitRound_ == 0 || fitRound_ >= 3 || e_->g.nodes.empty()) return;
-    static const bool dbg = std::getenv("NODESIM_DEBUG_UI") != nullptr;
-    FRect bb{1e9f, 1e9f, -1e9f, -1e9f};
-    for (const auto& n : e_->g.nodes) {
-        FRect b = nodeBox(n);
-        bb.x = std::min(bb.x, b.x);
-        bb.y = std::min(bb.y, b.y);
-        bb.w = std::max(bb.w, b.x + b.w);
-        bb.h = std::max(bb.h, b.y + b.h);
-    }
-    // box visível (em coords de mundo) do viewport atual
-    Vec2 vTL = s2w({0, 0});
-    Vec2 vBR = s2w({(float)bmp_.width(), (float)bmp_.height()});
-    const FRect view{vTL.x, vTL.y, vBR.x - vTL.x, vBR.y - vTL.y};
-    // fração do grafo visível: exigir sobreposição SUBSTANCIAL (um calço de
-    // poucos px conta como invisível: o fit rodou com outro tamanho de pane)
-    const float ox0 = std::max(bb.x, view.x), ox1 = std::min(bb.w, view.x + view.w);
-    const float oy0 = std::max(bb.y, view.y), oy1 = std::min(bb.h, view.y + view.h);
-    const float frac = ox1 > ox0 && oy1 > oy0
-                           ? ((ox1 - ox0) * (oy1 - oy0)) /
-                                 std::max(1.0f, (bb.w - bb.x) * (bb.h - bb.y))
-                           : 0.0f;
-    bool vis = frac >= 0.3f;
-    if (dbg)
-        std::fprintf(stderr,
-                     "drawNodes n=%zu zoom=%.2f cam=(%.0f,%.0f) bmp=%dx%d vis=%.2f\n",
-                     e_->g.nodes.size(), (double)zoom_, (double)camX_, (double)camY_,
-                     bmp_.width(), bmp_.height(), frac);
-    if (vis) return;
-    ++fitRound_;
-    // refit imediato: em painéis parados (PAUSED) NÃO chegam mais paints,
-    // então um fit "adiado" fica órfão; GetClientSize() já é o size assentado.
-    centerOnGraph();
-}
-
-void GraphCanvas::requestFit() {
-    frameDelay_ = 12;   // paints until re-fit (pane layout settles)
-}
-
-void GraphCanvas::centerOnGraph() {
-    if (e_->g.nodes.empty()) {
-        zoom_ = 1;
-        camX_ = camY_ = 0;
-        Refresh(false);
-        return;
-    }
-    float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
-    for (const auto& n : e_->g.nodes) {
-        FRect b = nodeBox(n);
-        x0 = std::min(x0, b.x); y0 = std::min(y0, b.y);
-        x1 = std::max(x1, b.x + b.w); y1 = std::max(y1, b.y + b.h);
-    }
-    const wxSize sz = GetClientSize();
-    const float bw = std::max(1.0f, x1 - x0), bh = std::max(1.0f, y1 - y0);
-    zoom_ = std::min(1.0f, std::min((sz.x - 80.0f) / bw, (sz.y - 80.0f) / bh));
-    if (zoom_ < 0.15f) zoom_ = 0.15f;
-    camX_ = (x0 + x1) * 0.5f - sz.x / (2 * zoom_);
-    camY_ = (y0 + y1) * 0.5f - sz.y / (2 * zoom_);
-    // todo fit grava o tamanho do pane em que coube: os refits automáticos
-    // (onSize/ensureInView) comparam contra ESTE tamanho, não contra o do
-    // último paint — que pode nunca chegar (painel ocioso => fome de paints).
-    lastFitW_ = (float)sz.x;
-    lastFitH_ = (float)sz.y;
-    if (fitRound_ == 0) fitRound_ = 1; // abre a cadeia dos refits automáticos
-    Refresh(false);
 }
 
 void GraphCanvas::onDoubleClick(wxMouseEvent& ev) {
@@ -1638,6 +1035,11 @@ void GraphCanvas::onKeyDown(wxKeyEvent& ev) {
         default:
             break;
     }
+    ev.Skip();
+}
+
+void GraphCanvas::onKeyUp(wxKeyEvent& ev) {
+    actKeyUp(ev);
     ev.Skip();
 }
 

@@ -85,6 +85,12 @@ at readable zoom, hover/selection outline and the pending wire in the
 foreground (so it passes above nodes while connecting). Custom-shape plugins
 keep drawing their whole silhouette themselves.
 
+The canvas is split by responsibility (all `GraphCanvas`, same class):
+`canvas.cpp` (events/render/hit-testing), `canvas_acts.cpp` (NS_PLUGIN_ACTS
+clicks + keyboard), `canvas_fit.cpp` (auto-refit), `canvas_chrome.cpp` (fase
+4 chrome) and `canvas_widgets.cpp` (fase 1..3 in-node widgets). The
+compile-time switches gate whole files where possible, not scattered blocks.
+
 Compile-time switches (`Makefile`/`CMakeLists`):
 
 - `SIMULACRO_NODE_WINDOW=1` (default on, the fase 4 layer) — can be compiled

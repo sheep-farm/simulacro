@@ -442,13 +442,6 @@ struct Pushdown : Control {
                                     : pack(faceRgb[0], faceRgb[1], faceRgb[2]);
         if (!g->rect) return;
         const unsigned ring = pack(base[0], base[1], base[2]);
-        { static int n = 0; if (n < 6) {
-              ++n;
-              std::fprintf(stderr, "[push v2] on=%d ext=%d base=(%d,%d,%d) face=(%d,%d,%d)"
-                           " press=(%d,%d,%d) rgb=%08x\n", (int)on, (int)inOn_,
-                           base[0], base[1], base[2], faceRgb[0], faceRgb[1], faceRgb[2],
-                           pressRgb[0], pressRgb[1], pressRgb[2], faceCol);
-          } }
         // moldura da face + corpo da face
         g->rect(g->ctx, x, y, w, h, ring);
         g->rect(g->ctx, x + 1, y + 1, w - 2, h - 2, faceCol);
@@ -460,18 +453,16 @@ struct Pushdown : Control {
         // brilho do topo quando solto
         if (!on) g->rect(g->ctx, x + b + 2, y + b + 1, w - 2 * b - 4, 2,
                          0x2A2A38FFu);
-        // legenda: rotulo do usuário; vazio = r\u00f3tulo do nó; ca\u00e7a-vazio "PUSH"
-        const char* cap = caption_.empty() ? (g->label && *g->label ? g->label
+        // legenda: rotulo do usuário, senão o rótulo do nó ("PUSH")
+        std::string shown = caption_.empty()
+                                ? std::string(g->label && *g->label ? g->label
                                                                     : "PUSH")
-                                           : on ? caption_.c_str()
-                                           : caption_.c_str();
+                                : caption_;
+        if (inOn_ && !pressed_) shown += " EXT"; // pressão externa (nível 1)
         if (g->text) {
-            const int tw = g->textW ? g->textW(g->ctx, cap) : 0;
-            std::string shown = caption_;
-            if (inOn_ && !pressed_) shown += " EXT"; // pressão externa
-            const int tw2 = g->textW ? g->textW(g->ctx, shown.c_str()) : tw;
+            const int tw = g->textW ? g->textW(g->ctx, shown.c_str()) : 0;
             const unsigned tcol = on ? 0x0D0D12FFu : 0xF0F0F8FFu;
-            g->text(g->ctx, x + (w - tw2) / 2, y + h / 2 - 7, shown.c_str(), tcol);
+            g->text(g->ctx, x + (w - tw) / 2, y + h / 2 - 7, shown.c_str(), tcol);
         }
     }
 
@@ -494,9 +485,150 @@ struct Pushdown : Control {
     static constexpr int kPrefW = 96;
     static constexpr int kPrefH = 72;
     static constexpr bool kCustomShape = true;
-    static constexpr int kPressInset = 10; // margem interna \u00e0 face (world px)
+    static constexpr int kPressInset = 10; // margem interna da face (world px)
 
    protected:
     Pushdown() = default;
+};
+
+// ---- Switch base (herança para chaves ON/OFF de painel) ----
+// Prima do Pushdown: o NS_ACT_TOGGLE comanda params[0] (cada clique alterna
+// e o valor FICA), a saída publica o estado e a face mostra ON/OFF.
+//   - estado interno `on_` ligado ao params[0] (BOOL, nome `ligado`);
+//   - paramGet/paramSet automáticos + blob automático (via Control);
+//   - kMomentary=false casa com NS_ACT_TOGGLE (mantém 1 após soltar);
+//   - kDefIn=0: chave NÃO tem entrada de nível (o estado é do operador);
+//   - textos rotulo/on/off (hex legível) caem sobre defColor;
+//   - kCustomShape=true: o corpo é autorender por draw(), apenas a FACE
+//     ocupa o desenho (margem kPressInset livre para selecionar/arrastar,
+//     com o host honrando o inset da tabela NS_PLUGIN_ACTS_IN).
+// Terceiros derivam; o contrato (acts + design) fica na subclasse.
+struct Switch : Control {
+    bool on_ = false;          // estado (params[0] `ligado`)
+    std::string caption_ = ""; // rotulo (textos[0]); vazio = "SW"
+    std::string onCol_ = "";   // hex com a chave ON  (textos[1])
+    std::string offCol_ = "";  // hex com a chave OFF (textos[2])
+
+    // ---- estado via params[0] (`ligado`) ----
+    double paramGet(int i) const override {
+        return i == 0 ? (on_ ? 1.0 : 0.0) : 0.0;
+    }
+    void paramSet(int i, double v) override {
+        if (i != 0) return;
+        const bool want = v > 0.5;
+        if (want == on_) return;
+        on_ = want;
+        onToggled(on_);
+    }
+
+    int numOut() const override { return 1; } // uma porta [0;1]
+    int numParams() const override { return 1; }
+    const NsParam* params() const override { return kParams; }
+    int numTexts() const override { return 3; }
+    const char* const* texts() const override { return kTexts; }
+    void defColor(int rgb[3]) const override {
+        rgb[0] = 70;
+        rgb[1] = 130;
+        rgb[2] = 235;
+    }
+
+    // ---- textos editáveis: rotulo, on/off (hex) ----
+    const char* textGet(int i) const override {
+        if (i == 0) return caption_.c_str();
+        if (i == 1) return onCol_.c_str();
+        if (i == 2) return offCol_.c_str();
+        return "";
+    }
+    void textSet(int i, const char* s) override {
+        if (i == 0)
+            caption_ = s ? s : "";
+        else if (i == 1)
+            onCol_ = s ? s : "";
+        else if (i == 2)
+            offCol_ = s ? s : "";
+    }
+
+    // ---- simulação: a chave publica o estado (sem nível externo) ----
+    double step(const NsContext& c) override {
+        (void)c;
+        return on_ ? 1.0 : 0.0;
+    }
+
+    // ---- hook para subclasses ----
+    virtual void onToggled(bool on) {
+        (void)on;
+    }
+
+    // ---- design default (kCustomShape=true => draw() autorende a FACE) ----
+    // Pílula com cursor: OFF encosta à esquerda, ON encosta à direita.
+    void draw(const NsDraw* g, const NsRect* area) override {
+        if (!g || !area) return;
+        const int m = kPressInset;
+        const int x = area->x + m, y = area->y + m;
+        const int w = area->w - 2 * m, h = area->h - 2 * m;
+        if (w <= 8 || h <= 8) return;
+
+        // cores: textos (hex legível) caem sobre as derivadas de defColor
+        int base[3];
+        defColor(base);
+        int onRgb[3] = {base[0], base[1], base[2]};
+        int offRgb[3] = {base[0] / 3, base[1] / 3, base[2] / 3}; // escurecida
+        parseHexColor(onCol_.empty() ? nullptr : onCol_.c_str(), onRgb[0], onRgb[1], onRgb[2]);
+        parseHexColor(offCol_.empty() ? nullptr : offCol_.c_str(), offRgb[0], offRgb[1], offRgb[2]);
+        // pacote 0xRRGGBBAA (contrato do NsDraw; ver sdk/nodesim_plugin.h)
+        auto pack = [](int r, int gg, int b) {
+            return ((unsigned)r << 24) | ((unsigned)gg << 16) | ((unsigned)b << 8) | 0xFFu;
+        };
+        if (!g->rect) return;
+        const unsigned ring = pack(base[0], base[1], base[2]);
+        const unsigned body = on_ ? pack(onRgb[0], onRgb[1], onRgb[2])
+                                  : pack(offRgb[0], offRgb[1], offRgb[2]);
+        // moldura da face + corpo da face
+        g->rect(g->ctx, x, y, w, h, ring);
+        g->rect(g->ctx, x + 1, y + 1, w - 2, h - 2, body);
+        // cursor (knob): terço direito quando ON, terço esquerdo quando OFF
+        const int kw = std::max(6, w / 3);
+        const int kh = std::max(4, h / 2);
+        const int kx = on_ ? x + w - kw - 2 : x + 2;
+        const int ky = y + (h - kh) / 2;
+        g->rect(g->ctx, kx, ky, kw, kh, 0xE8E8F0FFu);
+        // bisel da pílula (topo claro quando OFF, sombra quando ON)
+        const unsigned rim = on_ ? 0x101018FFu : 0x3C3C4AFFu;
+        g->rect(g->ctx, x, y, w, std::max(2, h / 8), rim);
+        // legenda: rotulo do usuário, senão o rótulo do nó ("SW")
+        std::string shown = caption_.empty()
+                                ? std::string(g->label && *g->label ? g->label
+                                                                    : "SW")
+                                : caption_;
+        shown += on_ ? "  I" : "  O"; // estado legível também no texto
+        if (g->text) {
+            const int tw = g->textW ? g->textW(g->ctx, shown.c_str()) : 0;
+            const unsigned tcol = on_ ? 0x0D0D12FFu : 0xF0F0F8FFu;
+            g->text(g->ctx, x + (w - tw) / 2, y + h / 2 - 7, shown.c_str(), tcol);
+        }
+    }
+
+    // ---- constantes padrão da switch (subclasse faz shadowing) ----
+    static constexpr int kNumParams = 1;
+    static constexpr NsParam kParams[kNumParams] = {
+        {"ligado", 0, 1, 0, NS_PARAM_BOOL, 1, nullptr, "ligada (0/1)", 0, nullptr},
+    };
+    static constexpr int kNumTexts = 3;
+    static constexpr const char* kTexts[kNumTexts] = {
+        "rotulo", // legenda da face (vazio = "SW")
+        "on",     // hex da pílula ligada (vazio = cor do plugin)
+        "off",    // hex da pílula desligada (vazio = derivado escuro)
+    };
+    static constexpr bool kMomentary = false; // NS_ACT_TOGGLE (casar com a tabela)
+    static constexpr bool kSelfOut = true;
+    static constexpr int kNumOut = 1;
+    static constexpr int kDefIn = 0; // chave não tem entrada de nível
+    static constexpr int kPrefW = 96;
+    static constexpr int kPrefH = 72;
+    static constexpr bool kCustomShape = true;
+    static constexpr int kPressInset = 10; // margem interna da face (world px)
+
+   protected:
+    Switch() = default;
 };
 } // namespace nsui

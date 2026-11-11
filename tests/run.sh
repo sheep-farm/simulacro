@@ -51,13 +51,20 @@ fi
 
 # Numeric regression: ar1 at 60 steps must match the golden trace byte for byte
 # (the engine is deterministic; regenerate tests/golden/ only with intent).
-for f in ar1 contador_logico; do
+for f in ar1 contador_logico push-level; do
     if [ -f "tests/golden/$f.csv" ] && [ -f "$EX/$f.nodesim" ]; then
-        if "$BIN" --run "$EX/$f.nodesim" --steps 60 > .golden.tmp 2>/dev/null
+        # steps por arquivo: push-level cobre a transição do nível (120 = 2s)
+        case "$f" in
+            push-level) n=120 ;;
+            *) n=60 ;;
+        esac
+        if "$BIN" --run "$EX/$f.nodesim" --steps $n > .golden.tmp 2>/dev/null
         then diff -q tests/golden/$f.csv .golden.tmp >/dev/null 2>&1 && ok "$f golden trace" || bad "$f golden trace"
         else bad "$f golden trace (run failed)"
         fi
         rm -f .golden.tmp
+    else
+        bad "missing golden/example for $f"
     fi
 done
 
@@ -74,7 +81,7 @@ fi
 
 # A few more files from the corpus must load without missing plugins
 # Controles nativos (push/entrada01/saida01) precisam carregar sem plugins faltando
-for f in contador.nodesim logica.nodesim kalman.nodesim controles.nodesim; do
+for f in contador.nodesim logica.nodesim kalman.nodesim controles.nodesim push-level.nodesim; do
     [ -f "$EX/$f" ] || continue
     err=$("$BIN" --run "$EX/$f" --steps 3 --summary 2>&1 >/dev/null || true)
     if printf '%s' "$err" | grep -qi 'missing plugin\|could not load'; then
@@ -83,6 +90,39 @@ for f in contador.nodesim logica.nodesim kalman.nodesim controles.nodesim; do
         ok "$f loads cleanly"
     fi
 done
+
+# ------------------------------------------------------------- kill switches
+# Cada camada gateada por compilação precisa compilar em TODA config: o bug
+# "construtor engolido por #if" (definições de função aninhadas no corpo)
+# só aparecia com SIMULACRO_NODE_UI=1 — config fora do loop de build diário.
+syntax_check() { # files... (config via $1)
+    desc="$1"; shift
+    extra="$1"; shift
+    flags="-std=c++17 -Isrc -Isrc/core -Isrc/sdk -I$THIRDPARTY -I$THIRDPARTY/backends $extra $(wx-config --cxxflags) $(sdl2-config --cflags)"
+    for f in "$@"; do
+        g++ -fsyntax-only $flags "$f" >/dev/null 2>&1 || { bad "syntax $desc: $f"; return; }
+    done
+    ok "syntax $desc"
+}
+THIRDPARTY=third_party/imgui
+GATED_FILES="src/canvas.cpp src/engine.cpp src/app.cpp src/properties.cpp"
+syntax_check "killswitch all-off" "" $GATED_FILES
+syntax_check "killswitch NODE_WINDOW" "-DSIMULACRO_NODE_WINDOW=1" $GATED_FILES
+syntax_check "killswitch NODE_WINDOW+NODE_UI" \
+    "-DSIMULACRO_NODE_WINDOW=1 -DSIMULACRO_NODE_UI=1" $GATED_FILES
+
+# ------------------------------------------------------------- controles
+# Comportamento da família de controles (push/switch) direto na base:
+# step com nível de entrada, design (cores 0xRRGGBBAA + textos), blob.
+if g++ -std=c++17 -Isrc/sdk -o .controles_test tests/controles_test.cpp 2>/dev/null &&
+   ./.controles_test > .controles_test.out 2>&1; then
+    sed 's/^/     /' .controles_test.out
+    ok "controles family behavior"
+else
+    cat .controles_test.out >&2 || true
+    bad "controles family behavior"
+fi
+rm -f .controles_test .controles_test.out
 
 if [ "$fail" -ne 0 ]; then
     echo "some tests failed" >&2

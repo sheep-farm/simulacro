@@ -173,7 +173,7 @@ void MainFrame::buildMenu() {
     view->Append(ID_ZOOM_IN, T("Zoom In") + "\tCtrl+=");
     view->Append(ID_ZOOM_OUT, T("Zoom Out") + "\tCtrl+-");
     view->Append(ID_ZOOM_RESET, T("Reset zoom"));
-    view->Append(ID_CENTER, T("Center on graph"));
+    view->Append(ID_CENTER, T("Center on graph\tCtrl+1"));
     view->AppendSeparator();
     view->AppendCheckItem(ID_PANE_PALETTE, T("Nodes palette"));
     view->AppendCheckItem(ID_PANE_PROPS, T("Properties"));
@@ -316,6 +316,9 @@ void MainFrame::bindUi() {
     Bind(wxEVT_CHAR_HOOK, [this](wxKeyEvent& ev) {
         wxWindow* focus = wxWindow::FindFocus();
         wxCommandEvent dummy;
+        if (ev.GetEventType() == wxEVT_KEY_UP) { ev.Skip(); return; } // soltura
+                                                                     // vai ao
+                                                                     // canvas
         if (ev.GetKeyCode() == WXK_F5) { onSimReset(dummy); return; }
         if (ev.GetKeyCode() == WXK_F6) { onSimStep(dummy); return; }
         if (focus != canvas_) { ev.Skip(); return; }
@@ -323,7 +326,18 @@ void MainFrame::bindUi() {
         // text field in a node widget would have V/G/C/O/Space stolen from it.
         if (imui::wantsTextInputNow() || imui::wantsKeyboardNow()) { ev.Skip(); return; }
         switch (ev.GetKeyCode()) {
-            case WXK_SPACE: onSimToggle(dummy); return;
+            case WXK_SPACE:
+                // Controle selecionado (NS_PLUGIN_ACTS): Space aperta o
+                // controle (HOLD) — sem controle, liga/pausa a simulação.
+                if (canvas_->actKey(ev, true)) return;
+                onSimToggle(dummy);
+                return;
+            case WXK_RETURN:
+            case WXK_NUMPAD_ENTER:
+                // Controle selecionado: Enter alterna (TOGGLE) ou pulsa
+                // (HOLD). Sem seleção de controle, nada (comportamento atual).
+                canvas_->actKey(ev, true);
+                return;
             case 'V': case 'v': onShowValues(dummy); return;
             case 'G': case 'g': onGrid(dummy); return;
             case 'C': case 'c': onCurve(dummy); return;
@@ -889,9 +903,11 @@ void MainFrame::onShortcuts(wxCommandEvent&) {
         T("Canvas\n"
           "  Left drag: move nodes / select\n"
           "  Left drag on a socket: create a wire\n"
-          "  Middle drag: pan   ·   Wheel: zoom\n"
+          "  Middle drag: pan   ·   Scroll: pan horizontal/vertical\n"
+          "  Ctrl+Scroll: zoom   ·   Ctrl+1: center on graph\n"
           "  Double-click: open script or scope\n"
-          "  Space: start/pause   ·   F5: reset   ·   F6: step\n"
+          "  Space: start/pause (com controle selecionado: aperta/alterna)\n"
+          "  F5: reset   ·   F6: step\n"
           "  V: values   ·   G: grid   ·   C: curved wires   ·   O: open scope\n"
           "\n"
           "Editing\n"

@@ -10,11 +10,15 @@ wx panels:
 - engine under `src/core/` and the built-in plugin sources under `plugins/`;
 - built-in **controls as node plugins** built on the `nsui::Control` C++
   base (`src/sdk/nodesim_ui_base.h`): `push` — **botão pushdown clicável na
-  FACE** (out [0;1]; `NS_PLUGIN_ACTS` + margem interna via
-  `NS_PLUGIN_ACTS_IN`, então a borda do box fica para SELECT/DRAG). Os
-  antigos `entrada01`/`saida01` saíram da biblioteca por decisão; voltam
-  como plugins de terceiros pelo **mesmo caminho de herança**
-  (`nsui::Control`, docs/abi.md);
+  FACE** (`NS_ACT_HOLD`: out [0;1] enquanto pressionado; nível de entrada
+  simula a pressão e o rótulo ganha ` EXT`) e `switch` — **chave liga/
+  desliga** (`NS_ACT_TOGGLE`: cada clique alterna e o valor FICA; out = 1
+  ligada). Ambos com rótulo/cores editáveis no dock e margem interna via
+  `NS_PLUGIN_ACTS_IN` (a borda do box fica para SELECT/DRAG). Com um
+  controle selecionado, **Space aperta/solta** (HOLD) e **Enter alterna**
+  (TOGGLE) no canvas. Os antigos `entrada01`/`saida01` saíram da biblioteca
+  por decisão; voltam como plugins de terceiros pelo **mesmo caminho de
+  herança** (`nsui::Control`, docs/abi.md);
 - file format `.nodesim` (format 10) and plugin **ABI 14** unchanged, so
   existing files and plugins keep working as before;
 - headless runner (`--run`), port traces and numeric regression through
@@ -121,7 +125,11 @@ XDG system data directories.
 
 | Key | Action |
 | --- | --- |
-| Space | start/pause (canvas focus) |
+| Space | start/pause (canvas focus); com um controle selecionado: aperta/solta (HOLD) |
+| Ctrl+1 | Center on graph (View) |
+| Scroll | pan horizontal/vertical da área de desenho |
+| Ctrl+Scroll | zoom no cursor (Shift+Scroll também desloca na horizontal) |
+| Enter | com um controle selecionado: alterna (TOGGLE) / pulso (HOLD) |
 | F6 / F5 | step / reset |
 | V / G / C | values / grid / curved wires |
 | O | open the selected Scope |
@@ -140,7 +148,10 @@ src/core/      engine (graph, steps, expressions, scopes, maps, i18n key tables,
                theme, exporters)
 src/sdk/       public plugin ABI header (ABI 14)
 src/engine.*   headless model: graph, clock, scopes, undo, files
-src/canvas.*   wxPanel node canvas (SDL off-screen renderer)
+src/canvas.*   wxPanel node canvas (SDL off-screen renderer); split by
+               responsibility: canvas_acts.cpp (NS_PLUGIN_ACTS clicks +
+               keyboard), canvas_fit.cpp (auto-refit), canvas_chrome.cpp
+               (fase 4 ImGui chrome), canvas_widgets.cpp (fase 1..3)
 src/nodeui.*   policy of where in-node widget strips live (inner/below/off)
 src/imgui_shell.* Dear ImGui shim: context/fonts/theme/events (fase 1)
 third_party/imgui vendored (v1.93.0, SDL renderer backend)

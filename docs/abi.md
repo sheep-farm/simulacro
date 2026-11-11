@@ -178,6 +178,15 @@ The base also ships two ready-made controls:
   Colors drawn through `NsDraw` pack as **0xRRGGBBAA** (alpha in the LOW
   byte, per `nodesim_plugin.h`); pack with the base's `pack()` helper — a
   0xAARRGGBB literal compiles silently and renders blended/miscolored.
+- `nsui::Switch` — the toggle family: `NS_ACT_TOGGLE` match (each canvas
+  click alternates params[0] `ligado` and the value STAYS), out [0;1] while
+  on, no input level (`kDefIn=0` — a switch has no external level), editable
+  texts `rotulo`/`on`/`off` (hex), authored pill design (`kCustomShape=true`,
+  knob left=OFF/right=ON). The built-in `switch` type derives from it.
+- **Keyboard acts** (host feature): with a control node selected on the
+  canvas, `Space` presses/releases it (HOLD: down=1/up=0; auto-repeat
+  ignored) and `Enter` toggles it (TOGGLE) or pulses (HOLD). The host finds
+  the act through the same `NS_PLUGIN_ACTS` table — no extra declaration.
 - `nsui::Control` generic blobs for the rest (e.g. `entrada01` and `saida01`,
   also in `controles.cpp`).
 

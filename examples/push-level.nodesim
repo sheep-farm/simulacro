@@ -1,0 +1,9 @@
+nodesim 10
+# botão pushdown por NÍVEL: o tick (t % 2 < 1) pressiona o push via ENTRADA
+# (enquanto 1, face pressionada) e a saída do push vai a um scope — a curva
+# é determinística (1 em [0,1), 0 em [1,2)) e vira golden trace.
+node 0 0 480 -40 0 "t % 2 < 1" "" "" 1 1 0 2 "tick" ""
+node 1 1 800 -40 0 "" "push" "pulsa=0 rotulo=\"NIVEL\" face=\"F5B361\" clique=\"C12929\"" 1 1 0 2 "botão" ""
+node 2 2 1120 -40 0 "" "" "" 0 1 0 2 "nivel" "tipo=linha, janela=120"
+edge 0 0 1 0
+edge 1 0 2 0

@@ -25,6 +25,18 @@ public:
     int singleSelection() const {
         return sel_.size() == 1 ? *sel_.begin() : -1;
     }
+    // Clique de controle (NS_PLUGIN_ACTS): face aperta/alterna, margem fica
+    // para o comportamento normal do nó. Implementados em canvas_acts.cpp.
+    bool beginActPress(const Vec2& world, bool add);
+    bool endActPress(bool releaseCapture);
+    // Teclado nos controles (NS_PLUGIN_ACTS): com um controle SELECIONADO,
+    // Space aperta (HOLD: down=1/up=0) e Enter alterna (TOGGLE). Devolve true
+    // quando consumiu a tecla (o CHAR_HOOK não a encaminha ao transporte).
+    bool actKey(const wxKeyEvent& ev, bool down);
+    // Soltura do HOLD acionado por teclado (wxEVT_KEY_UP; wx pula o
+    // CHAR_HOOK da janela-pai com Skip).
+    void actKeyUp(const wxKeyEvent& ev);
+
     void selectNode(int id, bool add = false);
     void selectAll();
     void clearSelection();
@@ -94,6 +106,7 @@ private:
     void onMouseWheel(wxMouseEvent&);
     void onDoubleClick(wxMouseEvent&);
     void onKeyDown(wxKeyEvent&);
+    void onKeyUp(wxKeyEvent&);
     void onEraseBackground(wxEraseEvent&) {}
     void onCaptureLost(wxMouseCaptureLostEvent&);
 
@@ -163,6 +176,7 @@ private:
     int widgetNode_ = -1;
 
     // canvas-click do controle (NS_PLUGIN_ACTS): "pulsa" 1 na pressão, 0 no soltado
+    bool kbActHeld_ = false; // Space do HOLD via teclado está pressionado
     int actNode_ = -1;
     int actParam_ = -1;
 

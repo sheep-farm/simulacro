@@ -8,11 +8,15 @@
 // arquivo é também o exemplo "como escrever um controle herdável como
 // plugin de terceiros" (docs/abi.md).
 //
-//   push  Botão pushdown clicável no canvas: out[0] = 1 enquanto a FACE
-//         estiver pressionada (NS_ACT_HOLD) e 0 na soltura. A borda do box
-//         fica como margem livre (NS_PLUGIN_ACTS_IN), então SELECIONAR e
-//         ARRASTAR o nó continuam possíveis. Terceiros derivam de
-//         nsui::Pushdown e herdam o comportamento (docs/abi.md).
+//   push    Botão pushdown clicável no canvas: out[0] = 1 enquanto a FACE
+//           estiver pressionada (NS_ACT_HOLD) e 0 na soltura. A borda do box
+//           fica como margem livre (NS_PLUGIN_ACTS_IN), então SELECIONAR e
+//           ARRASTAR o nó continuam possíveis. Terceiros derivam de
+//           nsui::Pushdown e herdam o comportamento (docs/abi.md).
+//   switch  Chave liga/desliga (por herança de nsui::Switch): cada clique na
+//           FACE alterna (NS_ACT_TOGGLE) e o estado FICA; out[0] = 1 ligada.
+//           Space/Enter no canvas também alternam (foco de teclado nos
+//           controles).
 #include <plugin.h>               // facade do host (core/plugin.h)
 #include "nodesim_ui_base.h"      // nsui::Control / Host / makeType (sdk)
 
@@ -43,8 +47,25 @@ struct Botao : nsui::Pushdown {
     }
 };
 
+// ------------------------------------------------------------------ chave
+// Chave liga/desliga POR HERANÇA de nsui::Switch: a base traz o estado
+// (`ligado`), o blob automático e o desenho da pílula ON/OFF; o contrato do
+// clique é NS_ACT_TOGGLE (cada clique alterna e o valor FICA — o oposto do
+// NS_ACT_HOLD do push, que volta a 0 na soltura).
+struct Chave : nsui::Switch {
+    static constexpr const char* kTypeId = "switch";
+    static constexpr const char* kLabel = "Chave (toggle)";
+    void defColor(int rgb[3]) const override {
+        rgb[0] = 70;
+        rgb[1] = 130;
+        rgb[2] = 235;
+    }
+};
+
 // Widgets declarados (ativos no build com SIMULACRO_NODE_UI; o editor padrão
-// cobre os mesmos campos): switch+led do `pulsa`, e os textos rótulo/cores.
+// cobre os mesmos campos): switch+led do estado e os textos rótulo/cores.
+// UMA tabela por .so (as macros definem o símbolo dlsym uma única vez), com
+// um spec POR TIPO.
 static const NsUiItem kItensButton[] = {
     {NS_UI_SWITCH, "", 0, 0, 0, 0, 0},           // pulsa
     {NS_UI_LED,    "", 0, 0, 0, 0, 0},
@@ -53,23 +74,35 @@ static const NsUiItem kItensButton[] = {
     {NS_UI_TEXT,   "cor face (hex)", 1, 0, 0, 0, 0},
     {NS_UI_TEXT,   "cor clique (hex)", 2, 0, 0, 0, 0},
 };
-static const NsUiSpec kSpecsButton[] = {{"push", 6, kItensButton}};
-NS_PLUGIN_UI(kSpecsButton, 1);
+static const NsUiItem kItensSwitch[] = {
+    {NS_UI_SWITCH, "", 0, 0, 0, 0, 0},           // ligado
+    {NS_UI_LED,    "", 0, 0, 0, 0, 0},
+    {NS_UI_VSPACE, nullptr, -1, 0, 0, 0, 0},
+    {NS_UI_TEXT,   "rótulo", 0, 0, 0, 0, 0},
+    {NS_UI_TEXT,   "cor ON (hex)", 1, 0, 0, 0, 0},
+    {NS_UI_TEXT,   "cor OFF (hex)", 2, 0, 0, 0, 0},
+};
+static const NsUiSpec kSpecsUi[] = {{"push", 6, kItensButton},
+                                    {"switch", 6, kItensSwitch}};
+NS_PLUGIN_UI(kSpecsUi, 2);
 
 // NS_PLUGIN_ACTS_IN: clique na FACE (inset de margem interna), a borda do
-// box fica livre para selecionar/arrastar o nó.
-static const NsAct kActsBotao[] = {
-    {"push", NS_ACT_HOLD, 0},
+// box fica livre para selecionar/arrastar o nó. O inset é DA TABELA (uma
+// por .so): os dois tipos da família compartilham a mesma margem.
+static const NsAct kActs[] = {
+    {"push", NS_ACT_HOLD, 0},     // aperta enquanto pressionado
+    {"switch", NS_ACT_TOGGLE, 0}, // alterna e o valor FICA
 };
-NS_PLUGIN_ACTS_IN(kActsBotao, 1, Botao::kPressInset);
+NS_PLUGIN_ACTS_IN(kActs, 2, Botao::kPressInset);
 
 } // namespace
 
 // --------------------------------------------------------------- plugin
 // Tabela de tipos gerada a partir das subclasses (herança na prática).
 extern "C" const NsPlugin* nodesim_plugin() {
-    static const NsNodeType kTipos[] = {{nsui::makeType<Botao>()}};
+    static const NsNodeType kTipos[] = {{nsui::makeType<Botao>()},
+                                        {nsui::makeType<Chave>()}};
     static const NsPlugin kPlugin =
-        NS_PLUGIN_BUILTIN("ui", "1.1", 1, kTipos, "Control");
+        NS_PLUGIN_BUILTIN("ui", "1.2", 2, kTipos, "Control");
     return &kPlugin;
 }
