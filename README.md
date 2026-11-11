@@ -137,6 +137,9 @@ XDG system data directories.
 | Ctrl+C, Ctrl+V, Ctrl+D | copy / paste / duplicate |
 | Del, Ctrl+A | delete selection / select all |
 | Ctrl+G, Ctrl+Shift+G | group / ungroup |
+| Ctrl+Shift+L/R/T/B | align left / right / top / bottom (Edit > Align) |
+| Ctrl+Shift+H/V | align horizontal / vertical centers |
+| Ctrl+1 | center on graph |
 | Ctrl+K | focus the node search |
 | Ctrl+N/O/S, Ctrl+Shift+S | new / open / save / save as |
 | F1 | shortcut help |

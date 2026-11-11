@@ -37,6 +37,11 @@ public:
     // CHAR_HOOK da janela-pai com Skip).
     void actKeyUp(const wxKeyEvent& ev);
 
+    // Alinhamento/distribuição da seleção (edição de grafo: checkpoint,
+    // touch, refresh). Sem seleção múltipla não faz nada; distribuir exige 3+.
+    enum class Align { Left, Right, HCenter, Top, Bottom, VCenter, DistH, DistV };
+    void alignSelection(Align mode);
+
     void selectNode(int id, bool add = false);
     void selectAll();
     void clearSelection();

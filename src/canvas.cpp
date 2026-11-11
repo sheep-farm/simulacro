@@ -735,6 +735,72 @@ void GraphCanvas::onLeftDown(wxMouseEvent& ev) {
     rubberStart_ = rubberCur_ = mouseWorld_;
 }
 
+void GraphCanvas::alignSelection(Align mode) {
+    // Caixas dos nós selecionados: alinhar por BORDA/centro da caixa (o pos
+    // do nó é o CENTRO da caixa, igual ao applyMove). Distribuir divide o
+    // intervalo entre o primeiro e o último centro (ordem no eixo).
+    std::vector<Node*> ns;
+    float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+    for (int id : sel_) {
+        Node* n = e_->g.find(id);
+        if (!n) continue;
+        ns.push_back(n);
+        const FRect b = nodeBox(*n);
+        x0 = std::min(x0, b.x); y0 = std::min(y0, b.y);
+        x1 = std::max(x1, b.x + b.w); y1 = std::max(y1, b.y + b.h);
+    }
+    const bool dist = mode == Align::DistH || mode == Align::DistV;
+    if (ns.size() < (dist ? 3u : 2u)) return;
+    auto cx = [](const Node* n) { const FRect b = nodeBox(*n); return b.x + b.w * 0.5f; };
+    auto cy = [](const Node* n) { const FRect b = nodeBox(*n); return b.y + b.h * 0.5f; };
+    e_->checkpoint();
+    switch (mode) {
+        case Align::Left:
+            for (Node* n : ns) n->pos.x += x0 - nodeBox(*n).x;
+            break;
+        case Align::Right:
+            for (Node* n : ns) n->pos.x += x1 - (nodeBox(*n).x + nodeBox(*n).w);
+            break;
+        case Align::HCenter: {
+            const float c = (x0 + x1) * 0.5f;
+            for (Node* n : ns) n->pos.x += c - cx(n);
+            break;
+        }
+        case Align::Top:
+            for (Node* n : ns) n->pos.y += y0 - nodeBox(*n).y;
+            break;
+        case Align::Bottom:
+            for (Node* n : ns) n->pos.y += y1 - (nodeBox(*n).y + nodeBox(*n).h);
+            break;
+        case Align::VCenter: {
+            const float c = (y0 + y1) * 0.5f;
+            for (Node* n : ns) n->pos.y += c - cy(n);
+            break;
+        }
+        case Align::DistH: {
+            std::sort(ns.begin(), ns.end(),
+                      [&](const Node* a, const Node* b) { return cx(a) < cx(b); });
+            const float c0 = cx(ns.front()), c1 = cx(ns.back());
+            const float step = (c1 - c0) / (float)(ns.size() - 1);
+            for (size_t i = 0; i < ns.size(); ++i)
+                ns[i]->pos.x += c0 + step * (float)i - cx(ns[i]);
+            break;
+        }
+        case Align::DistV: {
+            std::sort(ns.begin(), ns.end(),
+                      [&](const Node* a, const Node* b) { return cy(a) < cy(b); });
+            const float c0 = cy(ns.front()), c1 = cy(ns.back());
+            const float step = (c1 - c0) / (float)(ns.size() - 1);
+            for (size_t i = 0; i < ns.size(); ++i)
+                ns[i]->pos.y += c0 + step * (float)i - cy(ns[i]);
+            break;
+        }
+    }
+    e_->g.touch();
+    Refresh(false);
+    if (onDocumentChanged) onDocumentChanged();
+}
+
 void GraphCanvas::startMove(Vec2 world) {
     moving_ = true;
     moveStart_ = world;

@@ -58,6 +58,7 @@ private:
     void onDelete(wxCommandEvent&);
     void onSelectAll(wxCommandEvent&);
     void onGroup(wxCommandEvent&);
+    void onAlign(wxCommandEvent&);
     void onUngroup(wxCommandEvent&);
     void onAddKey(const std::string& key);
     void onAddScript(wxCommandEvent&);

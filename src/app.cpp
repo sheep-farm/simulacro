@@ -39,6 +39,8 @@ enum {
     ID_OPEN, ID_SAVE, ID_SAVE_AS, ID_SAVE_INITIAL, ID_EXPORT_SCOPE,
     ID_UNDO, ID_REDO, ID_CUT, ID_COPY, ID_PASTE, ID_DUPLICATE, ID_DELETE,
     ID_SELECT_ALL, ID_GROUP, ID_UNGROUP,
+    ID_ALIGN_L, ID_ALIGN_R, ID_ALIGN_HC, ID_ALIGN_T, ID_ALIGN_B, ID_ALIGN_VC,
+    ID_ALIGN_DH, ID_ALIGN_DV,
     ID_ADD_SCRIPT, ID_ADD_SCOPE, ID_ADD_MAP, ID_ADD_JOIN, ID_ADD_SPLIT,
     ID_PALETTE_FOCUS,
     ID_SIM_TOGGLE, ID_SIM_STEP, ID_SIM_RESET, ID_SIM_CLEAR, ID_CONVERGE, ID_EVENTS,
@@ -152,6 +154,18 @@ void MainFrame::buildMenu() {
     edit->AppendSeparator();
     edit->Append(ID_GROUP, T("Group selection") + "\tCtrl+G");
     edit->Append(ID_UNGROUP, T("Ungroup") + "\tCtrl+Shift+G");
+    edit->AppendSeparator();
+    wxMenu* align = new wxMenu();
+    align->Append(ID_ALIGN_L, T("Align left") + "\tCtrl+Shift+L");
+    align->Append(ID_ALIGN_HC, T("Align horizontal centers") + "\tCtrl+Shift+H");
+    align->Append(ID_ALIGN_R, T("Align right") + "\tCtrl+Shift+R");
+    align->Append(ID_ALIGN_T, T("Align top") + "\tCtrl+Shift+T");
+    align->Append(ID_ALIGN_VC, T("Align vertical centers") + "\tCtrl+Shift+V");
+    align->Append(ID_ALIGN_B, T("Align bottom") + "\tCtrl+Shift+B");
+    align->AppendSeparator();
+    align->Append(ID_ALIGN_DH, T("Distribute horizontally"));
+    align->Append(ID_ALIGN_DV, T("Distribute vertically"));
+    edit->AppendSubMenu(align, T("Align"));
     mb->Append(edit, T("Edit"));
 
     auto* add = new wxMenu();
@@ -279,6 +293,7 @@ void MainFrame::bindUi() {
     Bind(wxEVT_MENU, &MainFrame::onDelete, this, ID_DELETE);
     Bind(wxEVT_MENU, &MainFrame::onSelectAll, this, ID_SELECT_ALL);
     Bind(wxEVT_MENU, &MainFrame::onGroup, this, ID_GROUP);
+    Bind(wxEVT_MENU, &MainFrame::onAlign, this, ID_ALIGN_L, ID_ALIGN_DV);
     Bind(wxEVT_MENU, &MainFrame::onUngroup, this, ID_UNGROUP);
     Bind(wxEVT_MENU, &MainFrame::onAddScript, this, ID_ADD_SCRIPT);
     Bind(wxEVT_MENU, &MainFrame::onAddScope, this, ID_ADD_SCOPE);
@@ -860,6 +875,27 @@ void MainFrame::onZoomOut(wxCommandEvent&) {
 }
 void MainFrame::onZoomReset(wxCommandEvent&) { canvas_->zoomReset(); }
 void MainFrame::onCenter(wxCommandEvent&) { canvas_->centerOnGraph(); }
+
+void MainFrame::onAlign(wxCommandEvent& ev) {
+    using A = GraphCanvas::Align;
+    A mode;
+    switch (ev.GetId()) {
+        case ID_ALIGN_L: mode = A::Left; break;
+        case ID_ALIGN_R: mode = A::Right; break;
+        case ID_ALIGN_HC: mode = A::HCenter; break;
+        case ID_ALIGN_T: mode = A::Top; break;
+        case ID_ALIGN_B: mode = A::Bottom; break;
+        case ID_ALIGN_VC: mode = A::VCenter; break;
+        case ID_ALIGN_DH: mode = A::DistH; break;
+        case ID_ALIGN_DV: mode = A::DistV; break;
+        default: return;
+    }
+    if (canvas_->selection().size() < 2) {
+        SetStatusText(T("select two or more nodes to align"), 0);
+        return;
+    }
+    canvas_->alignSelection(mode);
+}
 
 void MainFrame::onTogglePane(wxCommandEvent& ev) {
     const char* name = ev.GetId() == ID_PANE_PALETTE ? "palette"
