@@ -48,12 +48,16 @@ enum {
     ID_ADD_SCRIPT, ID_ADD_SCOPE, ID_ADD_MAP, ID_ADD_JOIN, ID_ADD_SPLIT,
     ID_PALETTE_FOCUS,
     ID_SIM_TOGGLE, ID_SIM_STEP, ID_SIM_RESET, ID_SIM_CLEAR, ID_CONVERGE, ID_EVENTS,
-    ID_RATE_BASE = wxID_HIGHEST + 200,
-    ID_ITER_BASE = wxID_HIGHEST + 230,
     ID_SHOW_VALUES, ID_GRID, ID_CURVE, ID_ZOOM_IN, ID_ZOOM_OUT, ID_ZOOM_RESET,
     ID_CENTER, ID_PANE_PALETTE, ID_PANE_PROPS, ID_PANE_SCOPES,
     ID_LANG_EN, ID_LANG_PT, ID_RELOAD_THEME,
-    ID_SHORTCUTS, ID_ABOUT
+    ID_SHORTCUTS, ID_ABOUT,
+    // Faixas reservadas DEPOIS do último ID sequencial: no meio do enum elas
+    // colidiam com os IDs que vêm depois (ID_ITER_BASE+1..4 caía em cima de
+    // SHOW_VALUES/GRID/CURVE/PANE_PALETTE e o FindItem do menu "Stop after"
+    // marcava os toggles de View — os checks do menu View se perdiam).
+    ID_RATE_BASE = wxID_HIGHEST + 200,
+    ID_ITER_BASE = wxID_HIGHEST + 230
 };
 
 const int kRates[] = {1, 5, 10, 20, 30, 60};
@@ -537,6 +541,7 @@ void MainFrame::setSimLabel() {
 void MainFrame::updateChecks() {
     wxMenuBar* mb = GetMenuBar();
     if (!mb) return;
+
     if (auto* it = mb->FindItem(ID_SAVE_INITIAL)) it->Check(engine_.saveInitial);
     if (auto* it = mb->FindItem(ID_SHOW_VALUES)) it->Check(canvas_->showValues());
     if (auto* it = mb->FindItem(ID_GRID)) it->Check(canvas_->grid());
@@ -554,6 +559,14 @@ void MainFrame::updateChecks() {
     if (auto* it = mb->FindItem(ID_PANE_SCOPES)) it->Check(aui_.GetPane("scopes").IsShown());
     if (auto* it = mb->FindItem(ID_LANG_EN)) it->Check(i18n::lang() == i18n::Lang::EN);
     if (auto* it = mb->FindItem(ID_LANG_PT)) it->Check(i18n::lang() == i18n::Lang::PT_BR);
+    static const bool dbg = std::getenv("NODESIM_DEBUG_UI") != nullptr;
+    if (dbg)
+        for (int id : {ID_SHOW_VALUES, ID_GRID, ID_CURVE, ID_PANE_PALETTE,
+                       ID_PANE_PROPS, ID_PANE_SCOPES, ID_LANG_EN, ID_LANG_PT,
+                       ID_CONVERGE, ID_EVENTS}) {
+            wxMenuItem* it = mb->FindItem(id);
+            if (it) std::fprintf(stderr, "[chk] id=%d checked=%d\n", id, (int)it->IsChecked());
+        }
     setSimLabel();
 }
 
