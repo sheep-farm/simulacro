@@ -119,6 +119,8 @@ XDG system data directories.
 - Omarchy theme bridge: the native chrome follows `colors.toml` and is polled
   while the app runs. UI language can be switched at runtime (English /
   Português do Brasil).
+- Toolbar with **labels or icons-only** (View > Toolbar labels; saved in the
+  session file).
 - **Session state saved on close** (`~/.local/state/nodesim/ui.ini`): pane
   layout (AUI perspective), window geometry, canvas camera (zoom/pan — with
   a file open; an empty graph starts centered), View toggles (values/grid/

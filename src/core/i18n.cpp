@@ -182,6 +182,7 @@ const Entry kEntries[] = {
     {"Align vertical centers", "Centralizar na vertical"},
     {"Distribute horizontally", "Distribuir na horizontal"},
     {"Distribute vertically", "Distribuir na vertical"},
+    {"Toolbar labels", "Rótulos na barra"},
     {"select two or more nodes to align", "selecione dois ou mais nós para alinhar"},
     {"Ungroup", "Desagrupar"},
     {"Map scope", "Mapa"},

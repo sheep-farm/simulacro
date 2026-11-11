@@ -32,7 +32,7 @@ public:
 private:
     // chrome
     void buildMenu();
-    void buildToolbar();
+    void buildToolbar(bool labels = true);
     void buildLayout();
     void bindUi();
     void applyTheme();
@@ -50,6 +50,7 @@ private:
     void onSaveAs(wxCommandEvent&);
     void onQuit(wxCommandEvent&);
     void onClose(wxCloseEvent&);
+    void onToolbarLabels(wxCommandEvent&);
     void onUndo(wxCommandEvent&);
     void onRedo(wxCommandEvent&);
     void onCut(wxCommandEvent&);
@@ -63,6 +64,7 @@ private:
     // Sessão (ui.ini em ~/.local/state/nodesim): pane layout, geometria,
     // câmera do canvas e toggles de View — salvo ao FECHAR, restaurado no
     // boot (o idioma vem primeiro no ctor, antes do buildMenu).
+    bool tbLabels_ = true; // barra com rótulos (ícones compactos quando falso)
     void saveSession();
     void restoreSession(const std::map<wxString, wxString>& s);
     void onUngroup(wxCommandEvent&);

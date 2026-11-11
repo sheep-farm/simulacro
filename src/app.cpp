@@ -75,7 +75,7 @@ enum {
     ID_SHOW_VALUES, ID_GRID, ID_CURVE, ID_ZOOM_IN, ID_ZOOM_OUT, ID_ZOOM_RESET,
     ID_CENTER, ID_PANE_PALETTE, ID_PANE_PROPS, ID_PANE_SCOPES,
     ID_LANG_EN, ID_LANG_PT, ID_RELOAD_THEME,
-    ID_SHORTCUTS, ID_ABOUT,
+    ID_SHORTCUTS, ID_ABOUT, ID_TB_LABELS,
     // Faixas reservadas DEPOIS do último ID sequencial: no meio do enum elas
     // colidiam com os IDs que vêm depois (ID_ITER_BASE+1..4 caía em cima de
     // SHOW_VALUES/GRID/CURVE/PANE_PALETTE e o FindItem do menu "Stop after"
@@ -160,6 +160,12 @@ MainFrame::MainFrame()
         if (it != sess.end() && it->second == "pt-BR")
             i18n::setLang(i18n::Lang::PT_BR);
     }
+    // modo da barra ANTES do buildToolbar (sem reconstrução no boot)
+    {
+        long v = 0;
+        const auto it = sess.find("tblabels");
+        if (it != sess.end() && it->second.ToLong(&v)) tbLabels_ = v != 0;
+    }
 
     CreateStatusBar(3);
     const int widths[] = {-1, 240, 280};
@@ -169,7 +175,7 @@ MainFrame::MainFrame()
     engine_.scanPlugins();
 
     buildMenu();
-    buildToolbar();
+    buildToolbar(tbLabels_);
     buildLayout();
     bindUi();
 
@@ -283,6 +289,8 @@ void MainFrame::buildMenu() {
     lang->AppendCheckItem(ID_LANG_PT, wxString::FromUTF8("Português (Brasil)"));
     view->AppendSubMenu(lang, T("Language"));
     view->Append(ID_RELOAD_THEME, T("Reload theme"));
+    view->AppendSeparator();
+    view->AppendCheckItem(ID_TB_LABELS, T("Toolbar labels"));
     mb->Append(view, T("View"));
 
     auto* sim = new wxMenu();
@@ -318,7 +326,7 @@ void MainFrame::buildMenu() {
     simItem_ = mb->FindItem(ID_SIM_TOGGLE);
 }
 
-void MainFrame::buildToolbar() {
+void MainFrame::buildToolbar(bool labels) {
     auto* tb = new wxToolBar(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
                              wxTB_HORIZONTAL | wxTB_FLAT | wxTB_TEXT);
     tb->SetToolBitmapSize(wxSize(20, 20));
@@ -326,26 +334,32 @@ void MainFrame::buildToolbar() {
     auto icon = [](const wxArtID& id) {
         return wxArtProvider::GetBitmap(id, wxART_TOOLBAR, wxSize(20, 20));
     };
-    tb->AddTool(ID_NEW, T("New"), icon(wxART_NEW), T("New"));
-    tb->AddTool(ID_OPEN, T("Open"), icon(wxART_FILE_OPEN), T("Open"));
-    tb->AddTool(ID_SAVE, T("Save"), icon(wxART_FILE_SAVE), T("Save"));
+    // rótulo vazio = SÓ ÍCONE (modo compacto); o tooltip informa sempre
+    auto add = [&](int id, const char* name, const wxBitmap& bmp,
+                   const char* help, wxItemKind kind = wxITEM_NORMAL) {
+        tb->AddTool(id, labels ? T(name) : "", bmp, T(help), kind);
+    };
+    add(ID_NEW, "New", icon(wxART_NEW), "New");
+    add(ID_OPEN, "Open", icon(wxART_FILE_OPEN), "Open");
+    add(ID_SAVE, "Save", icon(wxART_FILE_SAVE), "Save");
     tb->AddSeparator();
-    tb->AddTool(ID_UNDO, T("Undo"), icon(wxART_UNDO), T("Undo"));
-    tb->AddTool(ID_REDO, T("Redo"), icon(wxART_REDO), T("Redo"));
+    add(ID_UNDO, "Undo", icon(wxART_UNDO), "Undo");
+    add(ID_REDO, "Redo", icon(wxART_REDO), "Redo");
     tb->AddSeparator();
     // Alinhamento da seleção como DROPDOWN (um único botão na barra): a seta
     // abre o menu (SetDropdownMenu) e o clique no CORPO também abre (o Bind
     // do ID_ALIGN_DD faz PopupMenu na posição da tool). Os itens reusam os
     // IDs do menu Edit > Align.
-    tb->AddTool(ID_ALIGN_DD, T("Align"), alignIcon(), T("Align"), wxITEM_DROPDOWN);
+    tb->AddTool(ID_ALIGN_DD, labels ? T("Align") : "", alignIcon(), T("Align"),
+                wxITEM_DROPDOWN);
     tb->SetDropdownMenu(ID_ALIGN_DD, makeAlignMenu());
     tb->AddSeparator();
-    tb->AddTool(ID_SIM_TOGGLE, T("Start"), icon(wxART_GO_FORWARD), T("Start/Pause"));
-    tb->AddTool(ID_SIM_STEP, T("Step"), icon(wxART_GO_DOWN), T("Step"));
-    tb->AddTool(ID_SIM_RESET, T("Reset"), icon(wxART_REFRESH), T("Reset"));
+    add(ID_SIM_TOGGLE, "Start", icon(wxART_GO_FORWARD), "Start/Pause");
+    add(ID_SIM_STEP, "Step", icon(wxART_GO_DOWN), "Step");
+    add(ID_SIM_RESET, "Reset", icon(wxART_REFRESH), "Reset");
     tb->AddSeparator();
-    tb->AddTool(ID_ADD_SCRIPT, T("Script"), icon(wxART_NEW_DIR), T("Add script node"));
-    tb->AddTool(ID_ADD_SCOPE, T("Scope"), icon(wxART_REPORT_VIEW), T("Add scope node"));
+    add(ID_ADD_SCRIPT, "Script", icon(wxART_NEW_DIR), "Add script node");
+    add(ID_ADD_SCOPE, "Scope", icon(wxART_REPORT_VIEW), "Add scope node");
     tb->Realize();
     SetToolBar(tb);
 }
@@ -423,6 +437,7 @@ void MainFrame::bindUi() {
     Bind(wxEVT_MENU, &MainFrame::onTogglePane, this, ID_PANE_SCOPES);
     Bind(wxEVT_MENU, &MainFrame::onLang, this, ID_LANG_EN, ID_LANG_PT);
     Bind(wxEVT_MENU, &MainFrame::onReloadTheme, this, ID_RELOAD_THEME);
+    Bind(wxEVT_MENU, &MainFrame::onToolbarLabels, this, ID_TB_LABELS);
     Bind(wxEVT_MENU, &MainFrame::onShortcuts, this, ID_SHORTCUTS);
     Bind(wxEVT_MENU, &MainFrame::onAbout, this, ID_ABOUT);
     Bind(wxEVT_TIMER, &MainFrame::onTimer, this);
@@ -606,6 +621,7 @@ void MainFrame::updateChecks() {
     if (auto* it = mb->FindItem(ID_PANE_SCOPES)) it->Check(aui_.GetPane("scopes").IsShown());
     if (auto* it = mb->FindItem(ID_LANG_EN)) it->Check(i18n::lang() == i18n::Lang::EN);
     if (auto* it = mb->FindItem(ID_LANG_PT)) it->Check(i18n::lang() == i18n::Lang::PT_BR);
+    if (auto* it = mb->FindItem(ID_TB_LABELS)) it->Check(tbLabels_);
     static const bool dbg = std::getenv("NODESIM_DEBUG_UI") != nullptr;
     if (dbg)
         for (int id : {ID_SHOW_VALUES, ID_GRID, ID_CURVE, ID_PANE_PALETTE,
@@ -802,6 +818,7 @@ void MainFrame::saveSession() {
     kv.emplace_back("values", canvas_->showValues() ? "1" : "0");
     kv.emplace_back("grid", canvas_->grid() ? "1" : "0");
     kv.emplace_back("curve", canvas_->curveWires() ? "1" : "0");
+    kv.emplace_back("tblabels", tbLabels_ ? "1" : "0");
     writeSession(kv);
 }
 
@@ -1098,6 +1115,16 @@ void MainFrame::onExportScope(wxCommandEvent&) {
 void MainFrame::onLang(wxCommandEvent& ev) {
     i18n::setLang(ev.GetId() == ID_LANG_PT ? i18n::Lang::PT_BR : i18n::Lang::EN);
     CallAfter([this] { applyLanguage(); });
+}
+
+void MainFrame::onToolbarLabels(wxCommandEvent&) {
+    tbLabels_ = !tbLabels_;
+    if (wxToolBar* old = GetToolBar()) { // rebuild: sem SetToolLabel no wx
+        old->Destroy();
+        SetToolBar(nullptr);
+    }
+    buildToolbar(tbLabels_);
+    updateChecks();
 }
 
 void MainFrame::onReloadTheme(wxCommandEvent&) {
