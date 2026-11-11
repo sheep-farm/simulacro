@@ -87,7 +87,7 @@ enum {
     ID_UNDO, ID_REDO, ID_CUT, ID_COPY, ID_PASTE, ID_DUPLICATE, ID_DELETE,
     ID_SELECT_ALL, ID_GROUP, ID_UNGROUP,
     ID_ALIGN_L, ID_ALIGN_R, ID_ALIGN_HC, ID_ALIGN_T, ID_ALIGN_B, ID_ALIGN_VC,
-    ID_ALIGN_DH, ID_ALIGN_DV,
+    ID_ALIGN_DH, ID_ALIGN_DV, ID_ALIGN_DD,
     ID_ADD_SCRIPT, ID_ADD_SCOPE, ID_ADD_MAP, ID_ADD_JOIN, ID_ADD_SPLIT,
     ID_PALETTE_FOCUS,
     ID_SIM_TOGGLE, ID_SIM_STEP, ID_SIM_RESET, ID_SIM_CLEAR, ID_CONVERGE, ID_EVENTS,
@@ -224,6 +224,22 @@ MainFrame::~MainFrame() {
     aui_.UnInit();
 }
 
+// Menu de alinhamento: UMA fonte para o submenu Edit > Align e para o
+// dropdown da barra (os IDs são os mesmos; um Bind só atende aos dois).
+static wxMenu* makeAlignMenu() {
+    wxMenu* m = new wxMenu();
+    m->Append(ID_ALIGN_L, T("Align left") + "\tCtrl+Shift+L");
+    m->Append(ID_ALIGN_HC, T("Align horizontal centers") + "\tCtrl+Shift+H");
+    m->Append(ID_ALIGN_R, T("Align right") + "\tCtrl+Shift+R");
+    m->Append(ID_ALIGN_T, T("Align top") + "\tCtrl+Shift+T");
+    m->Append(ID_ALIGN_VC, T("Align vertical centers") + "\tCtrl+Shift+V");
+    m->Append(ID_ALIGN_B, T("Align bottom") + "\tCtrl+Shift+B");
+    m->AppendSeparator();
+    m->Append(ID_ALIGN_DH, T("Distribute horizontally"));
+    m->Append(ID_ALIGN_DV, T("Distribute vertically"));
+    return m;
+}
+
 void MainFrame::buildMenu() {
     auto* mb = new wxMenuBar();
 
@@ -253,17 +269,7 @@ void MainFrame::buildMenu() {
     edit->Append(ID_GROUP, T("Group selection") + "\tCtrl+G");
     edit->Append(ID_UNGROUP, T("Ungroup") + "\tCtrl+Shift+G");
     edit->AppendSeparator();
-    wxMenu* align = new wxMenu();
-    align->Append(ID_ALIGN_L, T("Align left") + "\tCtrl+Shift+L");
-    align->Append(ID_ALIGN_HC, T("Align horizontal centers") + "\tCtrl+Shift+H");
-    align->Append(ID_ALIGN_R, T("Align right") + "\tCtrl+Shift+R");
-    align->Append(ID_ALIGN_T, T("Align top") + "\tCtrl+Shift+T");
-    align->Append(ID_ALIGN_VC, T("Align vertical centers") + "\tCtrl+Shift+V");
-    align->Append(ID_ALIGN_B, T("Align bottom") + "\tCtrl+Shift+B");
-    align->AppendSeparator();
-    align->Append(ID_ALIGN_DH, T("Distribute horizontally"));
-    align->Append(ID_ALIGN_DV, T("Distribute vertically"));
-    edit->AppendSubMenu(align, T("Align"));
+    edit->AppendSubMenu(makeAlignMenu(), T("Align"));
     mb->Append(edit, T("Edit"));
 
     auto* add = new wxMenu();
@@ -346,21 +352,13 @@ void MainFrame::buildToolbar() {
     tb->AddTool(ID_UNDO, T("Undo"), icon(wxART_UNDO), T("Undo"));
     tb->AddTool(ID_REDO, T("Redo"), icon(wxART_REDO), T("Redo"));
     tb->AddSeparator();
-    // Alinhamento da seleção (os MESMOS IDs do menu Edit > Align: um Bind só
-    // serve à barra e ao menu; ícones só, com tooltip — a barra tem wxTB_TEXT
-    // e 6 rótulos encheriam).
-    tb->AddTool(ID_ALIGN_L, "", alignIcon(GraphCanvas::Align::Left),
-                T("Align left") + " (Ctrl+Shift+L)");
-    tb->AddTool(ID_ALIGN_HC, "", alignIcon(GraphCanvas::Align::HCenter),
-                T("Align horizontal centers") + " (Ctrl+Shift+H)");
-    tb->AddTool(ID_ALIGN_R, "", alignIcon(GraphCanvas::Align::Right),
-                T("Align right") + " (Ctrl+Shift+R)");
-    tb->AddTool(ID_ALIGN_T, "", alignIcon(GraphCanvas::Align::Top),
-                T("Align top") + " (Ctrl+Shift+T)");
-    tb->AddTool(ID_ALIGN_VC, "", alignIcon(GraphCanvas::Align::VCenter),
-                T("Align vertical centers") + " (Ctrl+Shift+V)");
-    tb->AddTool(ID_ALIGN_B, "", alignIcon(GraphCanvas::Align::Bottom),
-                T("Align bottom") + " (Ctrl+Shift+B)");
+    // Alinhamento da seleção como DROPDOWN (um único botão na barra): a seta
+    // abre o menu (SetDropdownMenu) e o clique no CORPO também abre (o Bind
+    // do ID_ALIGN_DD faz PopupMenu na posição da tool). Os itens reusam os
+    // IDs do menu Edit > Align.
+    tb->AddTool(ID_ALIGN_DD, "", alignIcon(GraphCanvas::Align::HCenter),
+                T("Align"), wxITEM_DROPDOWN);
+    tb->SetDropdownMenu(ID_ALIGN_DD, makeAlignMenu());
     tb->AddSeparator();
     tb->AddTool(ID_SIM_TOGGLE, T("Start"), icon(wxART_GO_FORWARD), T("Start/Pause"));
     tb->AddTool(ID_SIM_STEP, T("Step"), icon(wxART_GO_DOWN), T("Step"));
@@ -408,6 +406,16 @@ void MainFrame::bindUi() {
     Bind(wxEVT_MENU, &MainFrame::onSelectAll, this, ID_SELECT_ALL);
     Bind(wxEVT_MENU, &MainFrame::onGroup, this, ID_GROUP);
     Bind(wxEVT_MENU, &MainFrame::onAlign, this, ID_ALIGN_L, ID_ALIGN_DV);
+    // corpo do botão dropdown: abre o menu no cursor (o usuário acabou de
+    // clicar na tool). A SETA já usa o menu do SetDropdownMenu; o menu é
+    // descartado após o popup síncrono.
+    Bind(wxEVT_MENU, [this](wxCommandEvent& ev) {
+        wxToolBar* tb = GetToolBar();
+        if (!tb) return;
+        wxMenu* m = makeAlignMenu();
+        tb->PopupMenu(m);
+        delete m;
+    }, ID_ALIGN_DD);
     Bind(wxEVT_MENU, &MainFrame::onUngroup, this, ID_UNGROUP);
     Bind(wxEVT_MENU, &MainFrame::onAddScript, this, ID_ADD_SCRIPT);
     Bind(wxEVT_MENU, &MainFrame::onAddScope, this, ID_ADD_SCOPE);
