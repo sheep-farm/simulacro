@@ -1,5 +1,7 @@
 # ABI — contract between the host and the plugins
 
+> Tutorial com passo a passo e fundamentos: [plugin-dev.md](plugin-dev.md).
+
 The simulator's plugin ABI lives in `src/sdk/nodesim_plugin.h`. **Today it is
 the ABI 14** (`NODESIM_PLUGIN_API = 14`), frozen: the file format (`.sim`
 10) and the ABI do not move without an explicit decision and a migration note

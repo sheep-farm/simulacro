@@ -104,6 +104,12 @@ helper for built-ins) and compile against the SDK that ships in
 `src/sdk/nodesim_plugin.h`. Third-party plugins only need that header: they
 do not include `common.h`.
 
+**Writing your own plugin?** Start at
+[docs/plugin-dev.md](docs/plugin-dev.md) — fundamentals plus step-by-step
+walkthroughs (numeric node → parameters/texts → custom drawing → panel
+controls by inheritance), the optional tables, testing and distribution.
+The contract reference lives in [docs/abi.md](docs/abi.md).
+
 ## Run
 
 ```sh
@@ -192,7 +198,9 @@ examples/      sample graphs and GeoJSON overlays
 tests/         run.sh smoke suite and tests/golden/*.csv numeric traces
 ```
 
-See [docs/architecture.md](docs/architecture.md) for the layering rules.
+See [docs/architecture.md](docs/architecture.md) for the layering rules,
+[docs/plugin-dev.md](docs/plugin-dev.md) for the plugin tutorial and
+[docs/abi.md](docs/abi.md) for the plugin contract reference.
 
 ## Regression discipline
 
