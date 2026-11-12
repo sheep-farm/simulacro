@@ -158,8 +158,9 @@ jobs:
           Todos os pacotes trazem os plugins (`.so`/`.dll`) e os exemplos
           (`.sim`). Guia de plugins: `docs/plugin-dev.md` no repositório.
           BODY
-          gh release view "$TAG" >/dev/null 2>&1 \
-            || gh release create "$TAG" --title "simulacro $VER" --notes-file notes.md
-          gh release upload "$TAG" dist/*.tar.gz dist/*.zip --clobber
-          gh release view "$TAG" --json assets \
+          REPO="${{ github.repository }}"
+          gh release view "$TAG" -R "$REPO" >/dev/null 2>&1 \
+            || gh release create "$TAG" -R "$REPO" --title "simulacro $VER" --notes-file notes.md
+          gh release upload "$TAG" -R "$REPO" dist/*.tar.gz dist/*.zip --clobber
+          gh release view "$TAG" -R "$REPO" --json assets \
             -q '.assets[].name'
