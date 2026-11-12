@@ -29,7 +29,7 @@ OBJ = build
 BIN = bin
 PLUGDIR = plugins
 THIRDPARTY = third_party/imgui
-VERSION := 0.2.0
+VERSION := 0.2.1
 
 SRC_CPP := $(shell find $(SRC) -name '*.cpp' | sort)
 OBJS = $(patsubst $(SRC)/%.cpp,$(OBJ)/%.o,$(SRC_CPP))

@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1 — 2026-11-12
+
+- **Fix**: panels now dock on Linux Wayland sessions (Hyprland, GNOME
+  Wayland, Sway…). Native Wayland forbids the global pointer grab and the
+  overlay hint that wxAUI docking relies on; the app now forces the GTK3
+  X11 backend (XWayland) automatically before any GUI initialization.
+  Opt-out for native Wayland: `NODESIM_GDK_WAYLAND=1`.
+
 ## 0.2.0 — 2026-11-12
 
 Cross-platform release: the same source tree now builds and runs on Linux,

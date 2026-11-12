@@ -158,6 +158,10 @@ jobs:
           - **macOS arm64** (`tar.gz`): requer `brew install wxwidgets sdl2 sdl2_ttf`.
           - **Windows x86_64** (`zip`): autocontido — DLLs de runtime incluídas.
 
+          Nota Linux/Wayland (0.2.1+): o app força o backend X11 do GTK3
+          (XWayland) automaticamente — o docking do wxAUI não funciona em
+          Wayland nativo. Opt-out: `NODESIM_GDK_WAYLAND=1`.
+
           Todos os pacotes trazem os plugins (`.so`/`.dll`) e os exemplos
           (`.sim`). Guia de plugins: `docs/plugin-dev.md` no repositório.
           BODY
