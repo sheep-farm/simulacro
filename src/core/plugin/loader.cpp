@@ -158,8 +158,13 @@ bool open(const std::string& path, LoadedPlugin& out, std::string& error) {
     }
     (void)NS_DL_ERR();
     auto sym = (const NsPlugin* (*)())NS_DL_SYM(h, "nodesim_plugin");
-    if (const char* err = dlerror()) {
+#if !defined(_WIN32)
+    if (const char* err = dlerror()) { // pós-dlsym: erro pendente do dlfcn
         error = std::string("missing nodesim_plugin (") + err + ")";
+        NS_DL_CLOSE(h);
+        return false;
+    }
+#endif
         NS_DL_CLOSE(h);
         return false;
     }
@@ -216,8 +221,10 @@ bool validHash(const std::string& h) {
 std::string fileDir(const std::string& file) {
     size_t p = file.rfind('/');
     std::string dir = p == std::string::npos ? "." : (p == 0 ? "/" : file.substr(0, p));
+#if !defined(_WIN32)
     char buf[PATH_MAX];
     if (realpath(dir.c_str(), buf)) return buf;
+#endif
     return dir;
 }
 
