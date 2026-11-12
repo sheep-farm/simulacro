@@ -359,6 +359,10 @@ print as `problem: …` and the plugin keeps working with the rest.
 
 ## 8. Distribution
 
+Platform note: a plugin may use platform APIs, but keep portability in
+mind — the built-in `proc` (process spawn) is POSIX-only and is excluded
+from the Windows build.
+
 Drop the `.so` (any name, built against `src/sdk/nodesim_plugin.h` only)
 into `~/.local/share/nodesim/plugins/`, or point `NODESIM_PLUGIN_PATH` at a
 directory. Third-party plugins may be C and depend only on libc; built-ins
