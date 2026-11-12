@@ -52,7 +52,7 @@ jobs:
           grep -q '^t,0\.500000$' smoke.csv
 
   windows:
-    name: windows (msys2/mingw64)
+    name: windows (msys2/ucrt64)
     runs-on: windows-latest
     defaults:
       run:
@@ -60,14 +60,15 @@ jobs:
     steps:
       - uses: msys2/setup-msys2@v2
         with:
+          msystem: UCRT64
           update: false
           install: >-
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-cmake
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-wxWidgets3.2
-            mingw-w64-x86_64-SDL2
-            mingw-w64-x86_64-SDL2_ttf
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-wxwidgets3.2-msw
+            mingw-w64-ucrt-x86_64-SDL2
+            mingw-w64-ucrt-x86_64-SDL2_ttf
             pkg-config
       - uses: actions/checkout@v4
       - name: Configure and build
