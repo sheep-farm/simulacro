@@ -162,8 +162,15 @@ jobs:
           (`.sim`). Guia de plugins: `docs/plugin-dev.md` no repositório.
           BODY
           REPO="${{ github.repository }}"
-          gh release view "$TAG" -R "$REPO" >/dev/null 2>&1 \
-            || gh release create "$TAG" -R "$REPO" --title "simulacro $VER" --notes-file notes.md
+          if gh release view "$TAG" -R "$REPO" >/dev/null 2>&1; then
+            # release pré-existente (ex.: draft órfão após re-tag da tag):
+            # publica e atualiza título/notas em vez de apenas subir assets
+            gh release edit "$TAG" -R "$REPO" --title "simulacro $VER" \
+              --notes-file notes.md --draft=false --latest
+          else
+            gh release create "$TAG" -R "$REPO" --title "simulacro $VER" \
+              --notes-file notes.md --latest
+          fi
           gh release upload "$TAG" -R "$REPO" dist/*.tar.gz dist/*.zip --clobber
           gh release view "$TAG" -R "$REPO" --json assets \
             -q '.assets[].name'
