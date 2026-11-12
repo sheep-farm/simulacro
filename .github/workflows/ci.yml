@@ -5,8 +5,8 @@ on:
   pull_request:
 
 jobs:
-  make:
-    name: make build + test suite
+  linux:
+    name: linux (make + test suite)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
@@ -18,15 +18,62 @@ jobs:
       - name: Build and test (headless)
         run: make -j4 test
 
-  cmake:
-    name: cmake build
+  linux-cmake:
+    name: linux (cmake)
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y g++ make cmake \
+          sudo apt-get install -y g++ make cmake pkg-config \
             libwxgtk3.2-dev libsdl2-dev libsdl2-ttf-dev fonts-dejavu-core
       - name: Configure and build
         run: cmake -S . -B build && cmake --build build -j4
+      - name: Smoke (headless trace with plugins)
+        run: |
+          NODESIM_PLUGIN_PATH=build/plugins ./build/simulacro \
+            --run examples/ar1.sim --steps 60 --summary | tee smoke.csv
+          grep -q '^t,0\.500000$' smoke.csv
+
+  macos:
+    name: macos (arm64)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: brew install wxwidgets sdl2 sdl2_ttf
+      - name: Configure and build
+        run: cmake -S . -B build && cmake --build build -j4
+      - name: Smoke (headless trace with plugins)
+        run: |
+          NODESIM_PLUGIN_PATH=build/plugins ./build/simulacro \
+            --run examples/ar1.sim --steps 60 --summary | tee smoke.csv
+          grep -q '^t,0\.500000$' smoke.csv
+
+  windows:
+    name: windows (msys2/mingw64)
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          update: false
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-wxWidgets3.2
+            mingw-w64-x86_64-SDL2
+            mingw-w64-x86_64-SDL2_ttf
+            pkg-config
+      - uses: actions/checkout@v4
+      - name: Configure and build
+        run: cmake -S . -B build -G Ninja && cmake --build build -j4
+      - name: Smoke (headless trace with plugins)
+        run: |
+          NODESIM_PLUGIN_PATH=build/plugins ./build/simulacro.exe \
+            --run examples/ar1.sim --steps 60 --summary | tee smoke.csv
+          grep -q '^t,0\.500000$' smoke.csv

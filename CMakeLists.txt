@@ -12,8 +12,13 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
 endif()
 
 # ---------------------------------------------------------------- wxWidgets
-find_package(wxWidgets REQUIRED COMPONENTS core base aui propgrid)
-include(${wxWidgets_USE_FILE})
+# CONFIG primeiro (wx 3.2 é construída com CMake — MSYS2/brew instalam o
+# pacote de config); módulo (wx-config/registry) como fallback do Linux.
+find_package(wxWidgets COMPONENTS core base aui propgrid CONFIG QUIET)
+if(NOT wxWidgets_FOUND)
+    find_package(wxWidgets REQUIRED COMPONENTS core base aui propgrid)
+    include(${wxWidgets_USE_FILE})
+endif()
 
 # --------------------------------------------------------------------- SDL2
 find_package(PkgConfig REQUIRED)
@@ -43,6 +48,11 @@ target_link_libraries(simulacro PRIVATE
     ${wxWidgets_LIBRARIES}
     PkgConfig::SDL2
     PkgConfig::SDL2TTF)
+
+# GUI sem console atrás (MinGW); MSVC não é alvo.
+if(WIN32 AND CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    target_link_options(simulacro PRIVATE -mwindows)
+endif()
 
 if(MSVC)
     target_compile_options(simulacro PRIVATE /W4)

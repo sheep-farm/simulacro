@@ -5,6 +5,17 @@
 // Plugin loader: directory discovery, dlopen/dlsym and the optional
 // resource/execution/event tables. No registry policy lives here.
 #pragma once
+
+// Extensão da biblioteca de plugin por plataforma (.so/.dylib/.dll).
+// Definida junto ao shim de dlopen em loader.cpp; aqui só a EXTENSÃO,
+// usada também pelo scanner (manager.cpp).
+#if defined(_WIN32)
+#define NS_DL_EXT ".dll"
+#elif defined(__APPLE__)
+#define NS_DL_EXT ".dylib"
+#else
+#define NS_DL_EXT ".so"
+#endif
 #include "registry.h"
 #include <string>
 #include <vector>

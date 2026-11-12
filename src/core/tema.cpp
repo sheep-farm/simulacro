@@ -42,8 +42,13 @@ bool existsDir(const std::string& p) {
     return !p.empty() && ::stat(p.c_str(), &st) == 0 && S_ISDIR(st.st_mode);
 }
 std::string homeDir() {
+#if defined(_WIN32)
+    const char* up = std::getenv("USERPROFILE");
+    return up && *up ? up : ".";
+#else
     const char* h = std::getenv("HOME");
     return h && *h ? h : ".";
+#endif
 }
 
 int hexDig(char c) {
@@ -89,13 +94,32 @@ std::string slugTitle(std::string s) {
     s = trim(s);
     return s.empty() ? std::string("Omarchy") : s;
 }
+// Diretórios de estado/configuração. No Linux os contratos XDG ficam
+// EXATAMENTE como eram (~/.local/state/nodesim etc.); macOS e Windows usam
+// o padrão de cada sistema, mantendo o nome da pasta "nodesim" (compat).
 std::string statePath() {
+#if defined(_WIN32)
+    const char* la = std::getenv("LOCALAPPDATA");
+    if (la && *la) return std::string(la) + "/nodesim";
+    return homeDir() + "/AppData/Local/nodesim";
+#elif defined(__APPLE__)
+    return homeDir() + "/Library/Application Support/nodesim";
+#else
     const char* st = std::getenv("XDG_STATE_HOME");
     return (st && *st) ? std::string(st) : (homeDir() + "/.local/state");
+#endif
 }
 std::string configPath() {
+#if defined(_WIN32)
+    const char* la = std::getenv("LOCALAPPDATA");
+    if (la && *la) return std::string(la) + "/nodesim";
+    return homeDir() + "/AppData/Local/nodesim";
+#elif defined(__APPLE__)
+    return homeDir() + "/Library/Preferences/nodesim";
+#else
     const char* cfg = std::getenv("XDG_CONFIG_HOME");
     return (cfg && *cfg) ? std::string(cfg) : (homeDir() + "/.config");
+#endif
 }
 // Theme directory: honors NODESIM_THEME (a path or "off"), otherwise the Omarchy
 // state (…/omarchy/current/theme) and, finally, the old config.

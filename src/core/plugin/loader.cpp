@@ -13,10 +13,41 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <dlfcn.h>
 #include <limits.h>
 #include <sys/stat.h>
+
+// ---- shim de dlopen: Linux/macOS usam dlfcn; Windows usa LoadLibrary ----
+// As macros mantêm os pontos de chamada idênticos nas três plataformas.
+#if defined(_WIN32)
+#include <windows.h>
+#define NS_DL_OPEN(p)    ((void*)LoadLibraryA(p))
+#define NS_DL_SYM(h, n)  ((void*)GetProcAddress((HMODULE)(h), (n)))
+#define NS_DL_CLOSE(h)   FreeLibrary((HMODULE)(h))
+#define NS_DL_ERR()      std::string("LoadLibrary/GetProcAddress failed (code ") + \
+                         std::to_string((unsigned long)GetLastError()) + ")"
+#elif defined(__APPLE__)
+#include <dlfcn.h>
+#include <mach-o/dyld.h>
+#define NS_DL_OPEN(p)    dlopen((p), RTLD_NOW | RTLD_LOCAL)
+#define NS_DL_SYM(h, n)  dlsym((h), (n))
+#define NS_DL_CLOSE(h)   dlclose((h))
+inline std::string ns_dlerr() { // dlerror CONSOME o estado: uma única chamada
+    const char* e = dlerror();
+    return std::string(e ? e : "dlopen failed");
+}
+#define NS_DL_ERR() ns_dlerr()
+#else
+#include <dlfcn.h>
 #include <unistd.h>
+#define NS_DL_OPEN(p)    dlopen((p), RTLD_NOW | RTLD_LOCAL)
+#define NS_DL_SYM(h, n)  dlsym((h), (n))
+#define NS_DL_CLOSE(h)   dlclose((h))
+inline std::string ns_dlerr() { // dlerror CONSOME o estado: uma única chamada
+    const char* e = dlerror();
+    return std::string(e ? e : "dlopen failed");
+}
+#define NS_DL_ERR() ns_dlerr()
+#endif
 
 namespace {
 
@@ -41,21 +72,44 @@ void splitDirs(const char* value, std::vector<std::string>& out) {
 // Executable directory in absolute form. On Linux, /proc/self/exe resolves
 // symlinks; if it does not exist, returns empty and discovery continues without this step.
 std::string executableDir() {
+    // diretório do executável, por plataforma (descoberta de plugins
+    // relativa a <prefix>); vazio = descoberta relativa apenas
+#if defined(_WIN32)
+    char buf[MAX_PATH];
+    const DWORD n = GetModuleFileNameA(nullptr, buf, MAX_PATH);
+    if (!n) return "";
+    buf[n] = '\0';
+    std::string exe(buf);
+    const size_t p = exe.rfind('\\');
+    if (p == std::string::npos) return "";
+    return p == 2 ? exe.substr(0, 3) : exe.substr(0, p); // C:\ raiz
+#elif defined(__APPLE__)
     char buf[PATH_MAX];
-    ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
+    uint32_t size = sizeof(buf);
+    if (_NSGetExecutablePath(buf, &size) != 0) return "";
+    std::string exe(buf);
+    const size_t p = exe.rfind('/');
+    if (p == std::string::npos) return "";
+    return p == 0 ? "/" : exe.substr(0, p);
+#else
+    char buf[PATH_MAX];
+    const ssize_t n = readlink("/proc/self/exe", buf, sizeof(buf) - 1);
     if (n <= 0) return "";
     buf[n] = '\0';
     std::string exe(buf);
-    size_t p = exe.rfind('/');
+    const size_t p = exe.rfind('/');
     if (p == std::string::npos) return "";
     return p == 0 ? "/" : exe.substr(0, p);
+#endif
 }
 
 // Normalizes a path that already exists; if it does not exist, keeps it as is
 // (scanDirs ignores missing directories).
 std::string normalizePath(const std::string& p) {
-    char buf[PATH_MAX];
+#if !defined(_WIN32)                  // Windows: mantém como está (scanDirs
+    char buf[PATH_MAX];               // ignora pastas ausentes de qualquer forma)
     if (realpath(p.c_str(), buf)) return buf;
+#endif
     return p;
 }
 
@@ -94,29 +148,28 @@ namespace plugin_loader {
 
 bool open(const std::string& path, LoadedPlugin& out, std::string& error) {
     out = LoadedPlugin{};
-    void* h = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
+    void* h = NS_DL_OPEN(path.c_str());
     if (!h) {
-        const char* err = dlerror();
-        error = err ? err : "dlopen failed";
+        error = NS_DL_ERR();
         return false;
     }
-    dlerror();
-    auto sym = (const NsPlugin* (*)())dlsym(h, "nodesim_plugin");
+    (void)NS_DL_ERR();
+    auto sym = (const NsPlugin* (*)())NS_DL_SYM(h, "nodesim_plugin");
     if (const char* err = dlerror()) {
         error = std::string("missing nodesim_plugin (") + err + ")";
-        dlclose(h);
+        NS_DL_CLOSE(h);
         return false;
     }
     const NsPlugin* p = sym ? sym() : nullptr;
     if (!p) {
         error = "nodesim_plugin returned null";
-        dlclose(h);
+        NS_DL_CLOSE(h);
         return false;
     }
     if (p->api != NODESIM_PLUGIN_API) {
         error = "ABI " + std::to_string(p->api) + " (expected " +
                 std::to_string(NODESIM_PLUGIN_API) + ")";
-        dlclose(h);
+        NS_DL_CLOSE(h);
         return false;
     }
     // struct_size == 0 is accepted for old manual initializers,
@@ -125,12 +178,12 @@ bool open(const std::string& path, LoadedPlugin& out, std::string& error) {
     if (p->struct_size != 0 && p->struct_size < (int)sizeof(NsPlugin)) {
         error = "struct_size " + std::to_string(p->struct_size) +
                 " smaller than NsPlugin (" + std::to_string(sizeof(NsPlugin)) + ")";
-        dlclose(h);
+        NS_DL_CLOSE(h);
         return false;
     }
     if (p->num_types <= 0 || p->num_types > 1024 || !p->types) {
         error = "invalid type table";
-        dlclose(h);
+        NS_DL_CLOSE(h);
         return false;
     }
     out.handle = h;
@@ -139,7 +192,7 @@ bool open(const std::string& path, LoadedPlugin& out, std::string& error) {
 }
 
 void close(void* handle) {
-    if (handle) dlclose(handle);
+    if (handle) NS_DL_CLOSE(handle);
 }
 
 
@@ -168,10 +221,10 @@ std::string fileDir(const std::string& file) {
 } // namespace
 
 void loadResources(PluginRegistry& pm, PluginRegistry::Lib& lib) {
-    dlerror();
-    auto sym = (const NsResources* (*)())dlsym(lib.h, "nodesim_plugin_resources");
+    (void)NS_DL_ERR();
+    auto sym = (const NsResources* (*)())NS_DL_SYM(lib.h, "nodesim_plugin_resources");
     if (!sym) {
-        dlerror(); // absence is normal: clears the pending error
+        (void)NS_DL_ERR(); // absence is normal: clears the pending error
         return;
     }
     const NsResources* table = sym();
@@ -284,10 +337,10 @@ void loadResources(PluginRegistry& pm, PluginRegistry::Lib& lib) {
 int loadExec(PluginRegistry& pm, size_t libIndex) {
     if (libIndex >= pm.libs.size()) return 0;
     PluginRegistry::Lib& lib = pm.libs[libIndex];
-    dlerror();
-    auto sym = (const NsExecTable* (*)())dlsym(lib.h, "nodesim_plugin_exec");
+    (void)NS_DL_ERR();
+    auto sym = (const NsExecTable* (*)())NS_DL_SYM(lib.h, "nodesim_plugin_exec");
     if (!sym) {
-        dlerror();
+        (void)NS_DL_ERR();
         return 0;
     }
     const NsExecTable* table = sym();
@@ -354,10 +407,10 @@ int loadExec(PluginRegistry& pm, size_t libIndex) {
 int loadEvents(PluginRegistry& pm, size_t libIndex) {
     if (libIndex >= pm.libs.size()) return 0;
     PluginRegistry::Lib& lib = pm.libs[libIndex];
-    dlerror();
-    auto sym = (const NsEvents* (*)())dlsym(lib.h, "nodesim_plugin_events");
+    (void)NS_DL_ERR();
+    auto sym = (const NsEvents* (*)())NS_DL_SYM(lib.h, "nodesim_plugin_events");
     if (!sym) {
-        dlerror();
+        (void)NS_DL_ERR();
         return 0;
     }
     const NsEvents* table = sym();
@@ -468,10 +521,10 @@ int loadEvents(PluginRegistry& pm, size_t libIndex) {
 int loadUi(PluginRegistry& pm, size_t libIndex) {
     if (libIndex >= pm.libs.size()) return 0;
     PluginRegistry::Lib& lib = pm.libs[libIndex];
-    dlerror();
-    auto sym = (const NsUiTable* (*)())dlsym(lib.h, "nodesim_plugin_ui");
+    (void)NS_DL_ERR();
+    auto sym = (const NsUiTable* (*)())NS_DL_SYM(lib.h, "nodesim_plugin_ui");
     if (!sym) {
-        dlerror(); // absence is normal (generic parameter editor remains)
+        (void)NS_DL_ERR(); // absence is normal (generic parameter editor remains)
         return 0;
     }
     const NsUiTable* table = sym();
@@ -584,10 +637,10 @@ int loadUi(PluginRegistry& pm, size_t libIndex) {
 int loadActs(PluginRegistry& pm, size_t libIndex) {
     if (libIndex >= pm.libs.size()) return 0;
     PluginRegistry::Lib& lib = pm.libs[libIndex];
-    dlerror();
-    auto sym = (const NsActTable* (*)())dlsym(lib.h, "nodesim_plugin_acts");
+    (void)NS_DL_ERR();
+    auto sym = (const NsActTable* (*)())NS_DL_SYM(lib.h, "nodesim_plugin_acts");
     if (!sym) {
-        dlerror(); // absence is normal
+        (void)NS_DL_ERR(); // absence is normal
         return 0;
     }
     const NsActTable* table = sym();

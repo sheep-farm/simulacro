@@ -15,10 +15,22 @@ void initSdlOnce() {
     });
 }
 
+// Fonte monoespaçada por plataforma (primeira que abrir vence). No Linux os
+// caminhos de pacote são os de sempre; macOS/Windows usam as fontes do sistema.
 const char* kFonts[] = {
+#if defined(_WIN32)
+    "C:/Windows/Fonts/consola.ttf",        // Consolas
+    "C:/Windows/Fonts/cour.ttf",           // Courier New
+    "C:/Windows/Fonts/lucon.ttf",          // Lucida Console
+#elif defined(__APPLE__)
+    "/System/Library/Fonts/Menlo.ttc",
+    "/System/Library/Fonts/Monaco.ttf",
+    "/System/Library/Fonts/Supplemental/Courier New.ttf",
+#else
     "/usr/share/fonts/liberation/LiberationMono-Regular.ttf",
     "/usr/share/fonts/noto/NotoSansMono-Regular.ttf",
     "/usr/share/fonts/dejavu/DejaVuSansMono.ttf",
+#endif
 };
 } // namespace
 
