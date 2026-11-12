@@ -66,11 +66,20 @@ struct Csv {
 void* create() { return new (std::nothrow) Csv(); }
 void destroy(void* h) { delete (Csv*)h; }
 
-// file stamp (mtime in ns + size); false if inaccessible
+// file stamp (mtime in ns + size); false if inaccessible.
+// st_mtim (nanoseconds) is a POSIX extension: Windows falls back to st_mtime.
+long long mtimeNs(const struct stat& st) {
+#if defined(_WIN32)
+    return (long long)st.st_mtime * 1000000000LL;
+#else
+    return (long long)st.st_mtim.tv_sec * 1000000000LL + (long long)st.st_mtim.tv_nsec;
+#endif
+}
+
 bool fileStamp(const std::string& p, long long& mt, long long& sz) {
     struct stat st;
     if (p.empty() || ::stat(p.c_str(), &st) != 0) return false;
-    mt = (long long)st.st_mtim.tv_sec * 1000000000LL + (long long)st.st_mtim.tv_nsec;
+    mt = mtimeNs(st);
     sz = (long long)st.st_size;
     return true;
 }
