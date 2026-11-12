@@ -67,10 +67,13 @@ void* create() { return new (std::nothrow) Csv(); }
 void destroy(void* h) { delete (Csv*)h; }
 
 // file stamp (mtime in ns + size); false if inaccessible.
-// st_mtim (nanoseconds) is a POSIX extension: Windows falls back to st_mtime.
+// mtime in ns: st_mtim é Linux; st_mtimespec é macOS; Windows só st_mtime.
 long long mtimeNs(const struct stat& st) {
 #if defined(_WIN32)
     return (long long)st.st_mtime * 1000000000LL;
+#elif defined(__APPLE__)
+    return (long long)st.st_mtimespec.tv_sec * 1000000000LL +
+           (long long)st.st_mtimespec.tv_nsec;
 #else
     return (long long)st.st_mtim.tv_sec * 1000000000LL + (long long)st.st_mtim.tv_nsec;
 #endif
