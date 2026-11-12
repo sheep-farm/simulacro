@@ -101,7 +101,7 @@ struct Expr {
 
     // Implementation detail (AST node). Use only via parse()/eval().
     struct Node {
-        enum K { NUM, VAR, LOCAL, PNUM, PSTR, IN, CALL, UCALL, UN, BIN, TER, STR } k = NUM;
+        enum K { NUM, VAR, LOCAL, PNUM, PSTR, NIN, CALL, UCALL, UN, BIN, TER, STR } k = NUM;
         double num = 0;
         std::string sval; // STR / PSTR / user function name
         int var = -1;     // VAR: 0=t 1=dt 2=x 3=sum 4=n 5=pi 6=e | 100+k = xk

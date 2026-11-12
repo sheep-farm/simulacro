@@ -122,7 +122,7 @@ ExprVal ev(const Expr::Node* n, Exec& x, const std::vector<ExprVal>& vars) {
             }
             if (n->var >= 100) { int k = n->var - 100; if (x.c.xout && k < x.c.nxout) return ExprVal((double)x.c.xout[k]); }
             return ExprVal(0.0);
-        case Expr::Node::IN: {
+        case Expr::Node::NIN: {
             if (n->ch.size() == 1) { // in(i): flattened list
                 double d = toNumVal(ev(n->ch[0].get(), x, vars));
                 if (!x.err.empty()) return ExprVal();

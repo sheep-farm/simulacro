@@ -194,7 +194,7 @@ struct P {
         ++i; // '('
         if (name == "in") {
             if (inFunc) { fail("pure function cannot access inputs; pass the value as an argument"); return nullptr; }
-            auto n = mk(Expr::Node::IN);
+            auto n = mk(Expr::Node::NIN);
             auto a = expr(); if (!a) return nullptr;
             n->ch.push_back(std::move(a));
             if (eat(T::Comma)) {
