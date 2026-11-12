@@ -11,10 +11,6 @@ on:
 permissions:
   contents: write
 
-env:
-  # asserção de carga de plugins nos smokes
-  NODESIM_VERBOSE_PLUGINS: '1'
-
 jobs:
   linux:
     name: linux x86_64
@@ -54,6 +50,8 @@ jobs:
       - name: Configure and build
         run: cmake -S . -B build && cmake --build build -j4
       - name: Smoke (trace golden + carga de plugins)
+        env:
+          NODESIM_VERBOSE_PLUGINS: '1'
         run: |
           NODESIM_PLUGIN_PATH=build/plugins ./build/simulacro \
             --run examples/ar1.sim --steps 60 --summary | tee smoke.csv
@@ -100,6 +98,8 @@ jobs:
       - name: Configure and build
         run: cmake -S . -B build -G Ninja && cmake --build build -j4
       - name: Smoke (trace golden + carga de plugins)
+        env:
+          NODESIM_VERBOSE_PLUGINS: '1'
         run: |
           NODESIM_PLUGIN_PATH=build/plugins ./build/simulacro.exe \
             --run examples/ar1.sim --steps 60 --summary | tee smoke.csv
@@ -110,7 +110,8 @@ jobs:
           VER=${GITHUB_REF_NAME#v}
           PKG=simulacro-$VER-windows-x86_64
           mkdir -p "dist/$PKG/plugins"
-          cp build/simulacro.exe build/plugins/*.dll "dist/$PKG/plugins/"
+          cp build/simulacro.exe "dist/$PKG/"
+          cp build/plugins/*.dll "dist/$PKG/plugins/"
           # DLLs de runtime (wx/SDL/freetype/harfbuzz…): ntldd copia tudo que
           # resolve para fora do sistema (paths Windows — barras convertidas).
           cd "dist/$PKG"
