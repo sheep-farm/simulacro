@@ -81,7 +81,11 @@ enum {
     // SHOW_VALUES/GRID/CURVE/PANE_PALETTE e o FindItem do menu "Stop after"
     // marcava os toggles de View — os checks do menu View se perdiam).
     ID_RATE_BASE = wxID_HIGHEST + 200,
-    ID_ITER_BASE = wxID_HIGHEST + 230
+    ID_ITER_BASE = wxID_HIGHEST + 230,
+    // faixas reservadas COM FOLGA entre si (a colisão de IDs dos checks do
+    // menu já custou um bug — base nova nunca encosta na anterior)
+    ID_RECENT_BASE = wxID_HIGHEST + 260, // +0..+9: Open Recent
+    ID_RECENT_CLEAR = wxID_HIGHEST + 270
 };
 
 const int kRates[] = {1, 5, 10, 20, 30, 60};
@@ -175,6 +179,7 @@ MainFrame::MainFrame()
     engine_.scanPlugins();
 
     buildMenu();
+    updateRecentMenu(); // sem sessão: o submenu nasce com "(no recent files)"
     buildToolbar(tbLabels_);
     buildLayout();
     bindUi();
@@ -238,6 +243,9 @@ void MainFrame::buildMenu() {
     file->AppendSeparator();
     file->AppendCheckItem(ID_SAVE_INITIAL, T("Save initial state"));
     file->Append(ID_EXPORT_SCOPE, T("Export Scope SVG…"));
+    file->AppendSeparator();
+    recentMenu_ = new wxMenu();
+    file->AppendSubMenu(recentMenu_, T("Open Recent"));
     file->AppendSeparator();
     file->Append(wxID_EXIT, T("Exit") + "\tCtrl+Q");
     mb->Append(file, T("File"));
@@ -394,6 +402,9 @@ void MainFrame::buildLayout() {
 void MainFrame::bindUi() {
     Bind(wxEVT_MENU, &MainFrame::onNew, this, ID_NEW);
     Bind(wxEVT_MENU, &MainFrame::onOpen, this, ID_OPEN);
+    Bind(wxEVT_MENU, &MainFrame::onOpenRecent, this, ID_RECENT_BASE,
+         ID_RECENT_BASE + 9);
+    Bind(wxEVT_MENU, &MainFrame::onClearRecent, this, ID_RECENT_CLEAR);
     Bind(wxEVT_MENU, &MainFrame::onSave, this, ID_SAVE);
     Bind(wxEVT_MENU, &MainFrame::onSaveAs, this, ID_SAVE_AS);
     Bind(wxEVT_MENU, &MainFrame::onSaveInitial, this, ID_SAVE_INITIAL);
@@ -542,6 +553,37 @@ void MainFrame::newDocument() {
     updateStatus();
 }
 
+void MainFrame::pushRecent(const wxString& path) {
+    for (size_t i = 0; i < recent_.size(); ++i) // sem duplicatas: sobe p/ topo
+        if (recent_[i] == path) {
+            recent_.RemoveAt(i);
+            break;
+        }
+    recent_.Insert(path, 0);
+    while (recent_.size() > 10) recent_.RemoveAt((size_t)recent_.size() - 1);
+    updateRecentMenu();
+}
+
+void MainFrame::updateRecentMenu() {
+    if (!recentMenu_) return;
+    while (!recentMenu_->GetMenuItems().empty()) // wxMenu não tem Clear()
+        recentMenu_->Delete(recentMenu_->GetMenuItems().front());
+    if (recent_.empty()) {
+        wxMenuItem* it = recentMenu_->Append(wxID_ANY, T("(no recent files)"));
+        it->Enable(false);
+        return;
+    }
+    for (size_t i = 0; i < recent_.size() && i < 10; ++i) {
+        wxString label = recent_[i];
+        label.Replace("&", "&&"); // '&' em caminhos vira mnemônico: escapa
+        wxMenuItem* it = recentMenu_->Append(ID_RECENT_BASE + (int)i, label,
+                                             recent_[i]); // longHelp: caminho
+        it->Enable(wxFileExists(recent_[i])); // arquivo morto fica cinza
+    }
+    recentMenu_->AppendSeparator();
+    recentMenu_->Append(ID_RECENT_CLEAR, T("Clear list"));
+}
+
 bool MainFrame::loadFile(const std::string& path) {
     if (!engine_.load(path)) {
         if (engine_.lastError.empty()) engine_.lastError = "could not load " + path;
@@ -556,6 +598,7 @@ bool MainFrame::loadFile(const std::string& path) {
     updateTitle();
     updateStatus();
     SetStatusText(T("Loaded ") + wxString::FromUTF8(path), 0);
+    pushRecent(wxString::FromUTF8(path));
     return true;
 }
 
@@ -704,6 +747,7 @@ int MainFrame::askSave() {
                          wxOK | wxICON_ERROR, this);
             return wxCANCEL;
         }
+        pushRecent(path); // Save As do diálogo de fechar também entra no MRU
     } else if (!engine_.save()) {
         wxMessageBox(wxString::FromUTF8(engine_.lastError), T("Save failed"),
                      wxOK | wxICON_ERROR, this);
@@ -716,6 +760,20 @@ int MainFrame::askSave() {
 void MainFrame::onNew(wxCommandEvent&) {
     if (askSave() == wxCANCEL) return;
     newDocument();
+}
+
+void MainFrame::onOpenRecent(wxCommandEvent& ev) {
+    const int i = ev.GetId() - ID_RECENT_BASE;
+    if (i < 0 || i >= (int)recent_.size()) return;
+    const wxString path = recent_[i];
+    if (!loadFile(path.utf8_string()))
+        wxMessageBox(wxString::FromUTF8(engine_.lastError), T("Open failed"),
+                     wxOK | wxICON_ERROR, this);
+}
+
+void MainFrame::onClearRecent(wxCommandEvent&) {
+    recent_.clear();
+    updateRecentMenu();
 }
 
 void MainFrame::onOpen(wxCommandEvent&) {
@@ -755,8 +813,10 @@ void MainFrame::onSaveAs(wxCommandEvent&) {
     if (!engine_.saveAs(path.utf8_string()))
         wxMessageBox(wxString::FromUTF8(engine_.lastError), T("Save failed"),
                      wxOK | wxICON_ERROR, this);
-    else
+    else {
         SetStatusText(T("Saved ") + path, 0);
+        pushRecent(path);
+    }
     updateTitle();
     updateStatus();
 }
@@ -806,6 +866,12 @@ void MainFrame::restoreSession(const std::map<wxString, wxString>& s) {
     double z, cx, cy;
     if (num("zoom", &z) && num("camx", &cx) && num("camy", &cy))
         canvas_->setPendingView((float)z, (float)cx, (float)cy);
+    // MRU de arquivos (ordem de gravação = mais recente primeiro)
+    for (int i = 0; i < 10; ++i) {
+        const auto it = s.find("recent" + std::to_string(i));
+        if (it != s.end() && !it->second.empty()) recent_.Add(it->second);
+    }
+    updateRecentMenu();
     updateChecks(); // checks do menu condizem com o estado restaurado
 }
 
@@ -831,6 +897,8 @@ void MainFrame::saveSession() {
     kv.emplace_back("grid", canvas_->grid() ? "1" : "0");
     kv.emplace_back("curve", canvas_->curveWires() ? "1" : "0");
     kv.emplace_back("tblabels", tbLabels_ ? "1" : "0");
+    for (size_t i = 0; i < recent_.size() && i < 10; ++i)
+        kv.emplace_back("recent" + std::to_string(i), recent_[i]);
     writeSession(kv);
 }
 

@@ -65,6 +65,12 @@ private:
     // câmera do canvas e toggles de View — salvo ao FECHAR, restaurado no
     // boot (o idioma vem primeiro no ctor, antes do buildMenu).
     bool tbLabels_ = true; // barra com rótulos (ícones compactos quando falso)
+    wxArrayString recent_;      // MRU de arquivos (10; salvo na sessão)
+    wxMenu* recentMenu_ = nullptr;
+    void pushRecent(const wxString& path);
+    void updateRecentMenu();
+    void onOpenRecent(wxCommandEvent&);
+    void onClearRecent(wxCommandEvent&);
     void saveSession();
     void restoreSession(const std::map<wxString, wxString>& s);
     void onUngroup(wxCommandEvent&);
