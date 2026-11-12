@@ -117,7 +117,7 @@ jobs:
           cd "dist/$PKG"
           ntldd -R simulacro.exe 2>/dev/null \
             | awk '/=> /{print $3}' | tr '\\' '/' \
-            | grep -viE '/windows/|system32' | sort -u \
+            | grep -viE '/windows/|system32|^not$' | sort -u \
             | while read -r dll; do cp "$dll" .; done
           cp -r ../../examples examples
           cp ../../README.md ../../LICENSE .
