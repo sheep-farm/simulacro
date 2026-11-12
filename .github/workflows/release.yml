@@ -1,0 +1,164 @@
+name: release
+
+# Publica os binários no GitHub Release da tag (v*): Linux x86_64,
+# macOS arm64 e Windows x86_64 (zip autocontido).
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  # asserção de carga de plugins nos smokes
+  NODESIM_VERBOSE_PLUGINS: '1'
+
+jobs:
+  linux:
+    name: linux x86_64
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ make \
+            libwxgtk3.2-dev libsdl2-dev libsdl2-ttf-dev fonts-dejavu-core
+      - name: Build and test (headless suite)
+        run: make -j4 test
+      - name: Package
+        run: |
+          VER=${GITHUB_REF_NAME#v}
+          PKG=simulacro-$VER-linux-x86_64
+          mkdir -p "dist/$PKG"
+          cp -r bin/simulacro plugins/*.so "dist/$PKG/"
+          cp -r examples "dist/$PKG/examples"
+          cp README.md LICENSE "dist/$PKG/"
+          tar czf "$PKG.tar.gz" -C dist "$PKG"
+          echo "PKG=$PKG" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64
+          path: ${{ env.PKG }}.tar.gz
+          if-no-files-found: error
+
+  macos:
+    name: macos arm64
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: brew install wxwidgets sdl2 sdl2_ttf
+      - name: Configure and build
+        run: cmake -S . -B build && cmake --build build -j4
+      - name: Smoke (trace golden + carga de plugins)
+        run: |
+          NODESIM_PLUGIN_PATH=build/plugins ./build/simulacro \
+            --run examples/ar1.sim --steps 60 --summary | tee smoke.csv
+          grep -q '^t,1\.000000$' smoke.csv
+          grep -qE 'plugins: .+\([1-9][0-9]* tipos\)' smoke.csv
+      - name: Package
+        run: |
+          VER=${GITHUB_REF_NAME#v}
+          PKG=simulacro-$VER-macos-arm64
+          mkdir -p "dist/$PKG"
+          cp build/simulacro build/plugins/*.so "dist/$PKG/"
+          cp -r examples "dist/$PKG/examples"
+          cp README.md LICENSE "dist/$PKG/"
+          tar czf "$PKG.tar.gz" -C dist "$PKG"
+          echo "PKG=$PKG" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-arm64
+          path: ${{ env.PKG }}.tar.gz
+          if-no-files-found: error
+
+  windows:
+    name: windows x86_64
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-wxwidgets3.2-msw
+            mingw-w64-ucrt-x86_64-SDL2
+            mingw-w64-ucrt-x86_64-SDL2_ttf
+            mingw-w64-ucrt-x86_64-ntldd
+            zip
+            pkg-config
+      - uses: actions/checkout@v4
+      - name: Configure and build
+        run: cmake -S . -B build -G Ninja && cmake --build build -j4
+      - name: Smoke (trace golden + carga de plugins)
+        run: |
+          NODESIM_PLUGIN_PATH=build/plugins ./build/simulacro.exe \
+            --run examples/ar1.sim --steps 60 --summary | tee smoke.csv
+          grep -q '^t,1\.000000$' smoke.csv
+          grep -qE 'plugins: .+\([1-9][0-9]* tipos\)' smoke.csv
+      - name: Package
+        run: |
+          VER=${GITHUB_REF_NAME#v}
+          PKG=simulacro-$VER-windows-x86_64
+          mkdir -p "dist/$PKG/plugins"
+          cp build/simulacro.exe build/plugins/*.dll "dist/$PKG/plugins/"
+          # DLLs de runtime (wx/SDL/freetype/harfbuzz…): ntldd copia tudo que
+          # resolve para fora do sistema (paths Windows — barras convertidas).
+          cd "dist/$PKG"
+          ntldd -R simulacro.exe 2>/dev/null \
+            | awk '/=> /{print $3}' | tr '\\' '/' \
+            | grep -viE '/windows/|system32' | sort -u \
+            | while read -r dll; do cp "$dll" .; done
+          cp -r ../../examples examples
+          cp ../../README.md ../../LICENSE .
+          cd ../..
+          zip -qr "$PKG.zip" "dist/$PKG"
+          echo "PKG=$PKG" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x86_64
+          path: ${{ env.PKG }}.zip
+          if-no-files-found: error
+
+  publish:
+    name: publish to GitHub Release
+    needs: [linux, macos, windows]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create release and upload binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG=${GITHUB_REF_NAME#refs/tags/}
+          VER=${TAG#v}
+          cat > notes.md <<'BODY'
+          simulacro — editor e simulador de grafos de nós.
+
+          - **Linux x86_64** (`tar.gz`): requer `libwxgtk3.2`, `libsdl2`,
+            `libsdl2-ttf` instaladas. `./simulacro` dentro da pasta.
+          - **macOS arm64** (`tar.gz`): requer `brew install wxwidgets sdl2 sdl2_ttf`.
+          - **Windows x86_64** (`zip`): autocontido — DLLs de runtime incluídas.
+
+          Todos os pacotes trazem os plugins (`.so`/`.dll`) e os exemplos
+          (`.sim`). Guia de plugins: `docs/plugin-dev.md` no repositório.
+          BODY
+          gh release view "$TAG" >/dev/null 2>&1 \
+            || gh release create "$TAG" --title "simulacro $VER" --notes-file notes.md
+          gh release upload "$TAG" dist/*.tar.gz dist/*.zip --clobber
+          gh release view "$TAG" --json assets \
+            -q '.assets[].name'

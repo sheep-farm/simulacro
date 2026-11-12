@@ -7,6 +7,7 @@
 #include "loader.h"
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <set>
 namespace fs = std::filesystem;
@@ -30,8 +31,22 @@ int PluginManager::scan(const char* dir) {
 
 int PluginManager::scanDirs(const std::vector<std::string>& wanted) {
     int n = 0;
-    // extensão de biblioteca por plataforma (.so/.dylib/.dll — NS_DL_EXT)
-    const std::string ext = NS_DL_EXT;
+    // extensões aceitas por plataforma. No macOS o CMake gera MODULEs como
+    // .so (igual ao Linux) e o dlopen abre .dylib também — aceitamos ambos.
+#if defined(_WIN32)
+    const char* exts[] = {".dll"};
+#elif defined(__APPLE__)
+    const char* exts[] = {".so", ".dylib"};
+#else
+    const char* exts[] = {".so"};
+#endif
+    auto hasLibExt = [&exts](const std::string& f) {
+        for (const char* e : exts) {
+            const size_t n = std::strlen(e);
+            if (f.size() > n && f.compare(f.size() - n, n, e) == 0) return true;
+        }
+        return false;
+    };
     std::set<std::string> seen;
     for (const std::string& dir : wanted) {
         if (dir.empty()) continue;
@@ -44,9 +59,7 @@ int PluginManager::scanDirs(const std::vector<std::string>& wanted) {
             if (ec) break;
             if (!it->is_regular_file(ec)) continue;
             std::string f = it->path().filename().string();
-            if (f.size() <= ext.size() ||
-                f.compare(f.size() - ext.size(), ext.size(), ext) != 0)
-                continue;
+            if (!hasLibExt(f)) continue;
             const std::string path = it->path().string();
             if (!seen.insert(path).second) continue;
             plugin_loader::LoadedPlugin loaded;

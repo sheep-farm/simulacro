@@ -23,7 +23,7 @@ std::string g_startFile;
 bool g_openScopes = false;
 
 namespace {
-constexpr const char* kVersion = "0.1.0";
+constexpr const char* kVersion = SIMULACRO_VERSION; // src/core/version.h
 
 void usage(FILE* out) {
     std::fprintf(out,
@@ -53,7 +53,9 @@ std::string headerName(const Node& n, int id) {
 int runHeadless(const std::string& file, int steps, int rate, const std::string& pluginDir,
                 bool summary) {
     Engine e;
-    e.plugins.quiet = true;
+    // quiet por padrão; NODESIM_VERBOSE_PLUGINS=1 imprime "plugins: nome v…"
+    // (diagnóstico e asserção de carga nos smoke tests do CI)
+    e.plugins.quiet = std::getenv("NODESIM_VERBOSE_PLUGINS") == nullptr;
     if (!pluginDir.empty()) e.scanPlugins(pluginDir);
     else e.scanPlugins();
     if (!e.load(file)) {

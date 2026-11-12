@@ -174,7 +174,7 @@ MainFrame::MainFrame()
     CreateStatusBar(3);
     const int widths[] = {-1, 240, 280};
     SetStatusWidths(3, widths);
-    SetStatusText("simulacro 0.1.0", 0);
+    SetStatusText(wxString::FromUTF8(simulacroVersion()), 0);
 
     engine_.scanPlugins();
 
@@ -1240,7 +1240,7 @@ void MainFrame::onShortcuts(wxCommandEvent&) {
 
 void MainFrame::onAbout(wxCommandEvent&) {
     const wxString text =
-        "simulacro 0.1.0\n\n" +
+        wxString::FromUTF8(simulacroVersion()) + "\n\n" +
         T("Node graph editor and simulator (embedded nodesim engine).") + "\n\n" +
         wxString::FromUTF8(nodesimVersion()) + "\n\n" +
         "wxWidgets " + wxString(wxVERSION_STRING) + "\nSDL " +

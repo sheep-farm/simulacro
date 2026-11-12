@@ -8,10 +8,14 @@
 #include <string>
 #include "plugin.h"
 
-#define NODESIM_VERSION "1.4.0"
+#define SIMULACRO_VERSION "0.2.0" // app (this repo)
+#define NODESIM_VERSION "1.4.0"   // engine
 static constexpr int NODESIM_ABI = NODESIM_PLUGIN_API;
 static constexpr int NODESIM_FORMAT = 10; // 1st line of the .sim file: "nodesim 10"
 
+inline std::string simulacroVersion() {
+    return std::string("simulacro ") + SIMULACRO_VERSION;
+}
 inline std::string nodesimVersion() {
     return std::string("nodesim ") + NODESIM_VERSION + " (ABI " + std::to_string(NODESIM_ABI) +
            ", format " + std::to_string(NODESIM_FORMAT) + ")";
