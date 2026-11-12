@@ -170,7 +170,13 @@ int main(int argc, char** argv) {
         }
     }
 
-    if (!lang.empty()) setenv("NODESIM_LANG", lang.c_str(), 1);
+    if (!lang.empty()) {
+#if defined(_WIN32)
+        _putenv_s("NODESIM_LANG", lang.c_str()); // setenv é POSIX
+#else
+        setenv("NODESIM_LANG", lang.c_str(), 1);
+#endif
+    }
 
     if (headless) return runHeadless(runFile, steps, rate, pluginDir, summary);
 
