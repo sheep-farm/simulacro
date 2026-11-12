@@ -87,7 +87,7 @@ tag:
 
 | Package | Contains | Needs |
 |---|---|---|
-| `simulacro-<v>-linux-x86_64.tar.gz` | `simulacro` + `*.so` plugins + examples | `libwxgtk3.2`, `libsdl2`, `libsdl2-ttf` |
+| `simulacro-<v>-linux-x86_64.tar.gz` | `simulacro` + `*.so` plugins + examples | `libwxgtk3.2`, `libsdl2`, `libsdl2-ttf` (built on Ubuntu 24.04 — on other distros, prefer building from source) |
 | `simulacro-<v>-macos-arm64.tar.gz` | same (`.so`) | `brew install wxwidgets sdl2 sdl2_ttf` |
 | `simulacro-<v>-windows-x86_64.zip` | `simulacro.exe` + `*.dll` plugins + runtime DLLs | self-contained |
 

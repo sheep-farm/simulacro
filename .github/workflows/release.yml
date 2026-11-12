@@ -150,8 +150,11 @@ jobs:
           cat > notes.md <<'BODY'
           simulacro — editor e simulador de grafos de nós.
 
-          - **Linux x86_64** (`tar.gz`): requer `libwxgtk3.2`, `libsdl2`,
-            `libsdl2-ttf` instaladas. `./simulacro` dentro da pasta.
+          - **Linux x86_64** (`tar.gz`): compilado no Ubuntu 24.04 — requer
+            `libwxgtk3.2`, `libsdl2`, `libsdl2-ttf` **compativeis com o
+            Ubuntu 24.04** (outras distros com wx 3.2 compilado de forma
+            diferente podem avisar sobre vtables; prefira compilar do código
+            nesses casos). `./simulacro` dentro da pasta.
           - **macOS arm64** (`tar.gz`): requer `brew install wxwidgets sdl2 sdl2_ttf`.
           - **Windows x86_64** (`zip`): autocontido — DLLs de runtime incluídas.
 
