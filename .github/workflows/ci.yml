@@ -8,6 +8,8 @@ jobs:  # fail-fast off: um OS falhando não cancela os outros
   linux:
     name: linux (make + test suite)
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
@@ -21,6 +23,8 @@ jobs:  # fail-fast off: um OS falhando não cancela os outros
   linux-cmake:
     name: linux (cmake)
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
@@ -39,6 +43,8 @@ jobs:  # fail-fast off: um OS falhando não cancela os outros
   macos:
     name: macos (arm64)
     runs-on: macos-14
+    strategy:
+      fail-fast: false
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
@@ -54,6 +60,8 @@ jobs:  # fail-fast off: um OS falhando não cancela os outros
   windows:
     name: windows (msys2/ucrt64)
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
     defaults:
       run:
         shell: msys2 {0}
