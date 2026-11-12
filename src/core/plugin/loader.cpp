@@ -23,8 +23,11 @@
 #define NS_DL_OPEN(p)    ((void*)LoadLibraryA(p))
 #define NS_DL_SYM(h, n)  ((void*)GetProcAddress((HMODULE)(h), (n)))
 #define NS_DL_CLOSE(h)   FreeLibrary((HMODULE)(h))
-#define NS_DL_ERR()      std::string("LoadLibrary/GetProcAddress failed (code ") + \
-                         std::to_string((unsigned long)GetLastError()) + ")"
+inline std::string ns_dlerr() {
+    return std::string("LoadLibrary/GetProcAddress failed (code ") +
+           std::to_string((unsigned long)GetLastError()) + ")";
+}
+#define NS_DL_ERR() ns_dlerr()
 #elif defined(__APPLE__)
 #include <dlfcn.h>
 #include <mach-o/dyld.h>
