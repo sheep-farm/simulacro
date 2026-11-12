@@ -66,6 +66,19 @@ The native shell:
   scope settings;
 - SDL for the node canvas and the scope charts.
 
+## Quick start (60 seconds)
+
+```sh
+make -j8 && make plugins    # app at bin/simulacro + built-in plugins
+make test                   # 48 checks, fully headless (golden traces too)
+./bin/simulacro examples/controles.sim   # click the push button, flip the switch
+./bin/simulacro --run examples/ar1.sim --steps 600   # headless CSV trace
+```
+
+> Naming: the app is **simulacro**; the file format is **nodesim 10** and the
+> `NODESIM_*` environment variables keep the historical names. Both are
+> frozen compatibility surfaces inherited from the project this one absorbed.
+
 ## Requirements
 
 - C++17 compiler
@@ -175,7 +188,7 @@ src/scriptdlg.* native script editor
 src/app.*      MainFrame, menus, docks, actions
 src/main.cpp   GUI entry point and --run runner
 plugins/       built-in plugin sources + common.h; build targets: plugins/*.so
-examples/      sample graphs, GeoJSON overlays and manifests
+examples/      sample graphs and GeoJSON overlays
 tests/         run.sh smoke suite and tests/golden/*.csv numeric traces
 ```
 

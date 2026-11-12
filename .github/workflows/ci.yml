@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  make:
+    name: make build + test suite
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ make \
+            libwxgtk3.2-dev libsdl2-dev libsdl2-ttf-dev fonts-dejavu-core
+      - name: Build and test (headless)
+        run: make -j4 test
+
+  cmake:
+    name: cmake build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++ make cmake \
+            libwxgtk3.2-dev libsdl2-dev libsdl2-ttf-dev fonts-dejavu-core
+      - name: Configure and build
+        run: cmake -S . -B build && cmake --build build -j4
