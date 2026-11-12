@@ -165,9 +165,6 @@ bool open(const std::string& path, LoadedPlugin& out, std::string& error) {
         return false;
     }
 #endif
-        NS_DL_CLOSE(h);
-        return false;
-    }
     const NsPlugin* p = sym ? sym() : nullptr;
     if (!p) {
         error = "nodesim_plugin returned null";
