@@ -61,11 +61,13 @@ never docks; the drop hint may not appear. Happens on Wayland compositors
 
 **Cause:** native Wayland forbids what wxAUI's docking relies on — a
 global pointer grab during the drag and an overlay hint drawn over other
-windows. The app forces the GTK3 X11 backend (XWayland) automatically,
-before any GUI initialization, unless you set `GDK_BACKEND` yourself.
+windows. Wayland sessions also set `GDK_BACKEND="wayland,x11,*"` globally,
+so GTK3 would still pick Wayland. The app **forces** the GTK3 X11 backend
+(XWayland) automatically before any GUI initialization.
 
-- Check what the app is running under: `echo $XDG_SESSION_TYPE`.
-- Manual override (not needed with 0.2.1+): `GDK_BACKEND=x11 ./bin/simulacro`.
+- Opt-out (Wayland native on purpose — docking will not work):
+  `NODESIM_GDK_WAYLAND=1 ./bin/simulacro`.
+- Check what the session is running under: `echo $XDG_SESSION_TYPE`.
 
 ## Status bar warnings
 

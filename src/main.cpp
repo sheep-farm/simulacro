@@ -127,19 +127,22 @@ int main(int argc, char** argv) {
 #if defined(__linux__)
     // Wayland nativo quebra o docking do wxAUI: o protocolo proíbe grab global
     // do ponteiro e overlays sobre outras janelas, então o painel arrasta e
-    // flutua mas nunca encaixa (funciona no wxMSW/Windows e no X11). Força o
-    // backend X11 do GTK3 (roda via XWayland, invisível ao usuário) ANTES de
-    // qualquer inicialização da wx/GTK. Um GDK_BACKEND explícito do usuário
-    // sempre vence.
+    // flutua mas nunca encaixa (funciona no wxMSW/Windows e no X11/XWayland).
+    // Sessões Wayland definem GDK_BACKEND="wayland,x11,*" globalmente, então
+    // aqui o app precisa FORÇAR x11: o GTK3 tenta wayland primeiro e a 1ª
+    // tentativa do fix (respeitar a variável) não fazia nada.
+    // Roda ANTES de qualquer inicialização da wx/GTK. Opt-out para quem quiser
+    // Wayland nativo de propósito: NODESIM_GDK_WAYLAND=1 (docking não funciona).
     {
         const char* session = std::getenv("XDG_SESSION_TYPE");
         const bool wayland = std::getenv("WAYLAND_DISPLAY") != nullptr ||
                              (session && std::strcmp(session, "wayland") == 0);
-        if (wayland && std::getenv("GDK_BACKEND") == nullptr) {
+        const char* optOut = std::getenv("NODESIM_GDK_WAYLAND");
+        if (wayland && !(optOut && optOut[0] == '1')) {
 #if defined(_WIN32)
             _putenv_s("GDK_BACKEND", "x11"); // setenv é POSIX
 #else
-            setenv("GDK_BACKEND", "x11", 1);
+            setenv("GDK_BACKEND", "x11", 1); // overwrite: vence o padrão da sessão
 #endif
         }
     }
