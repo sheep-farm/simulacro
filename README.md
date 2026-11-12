@@ -79,6 +79,18 @@ make test                   # 48 checks, fully headless (golden traces too)
 > `NODESIM_*` environment variables keep the historical names. Both are
 > frozen compatibility surfaces inherited from the project this one absorbed.
 
+## Downloads
+
+Prebuilt binaries are published on
+[GitHub Releases](https://github.com/sheep-farm/simulacro/releases) for every
+tag:
+
+| Package | Contains | Needs |
+|---|---|---|
+| `simulacro-<v>-linux-x86_64.tar.gz` | `simulacro` + `*.so` plugins + examples | `libwxgtk3.2`, `libsdl2`, `libsdl2-ttf` |
+| `simulacro-<v>-macos-arm64.tar.gz` | same (`.so`) | `brew install wxwidgets sdl2 sdl2_ttf` |
+| `simulacro-<v>-windows-x86_64.zip` | `simulacro.exe` + `*.dll` plugins + runtime DLLs | self-contained |
+
 ## Requirements
 
 - C++17 compiler

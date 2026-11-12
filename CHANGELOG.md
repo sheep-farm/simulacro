@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.2.0 — 2026-11-12
+
+Cross-platform release: the same source tree now builds and runs on Linux,
+macOS and Windows, with binaries published on GitHub Releases.
+
+- **macOS + Windows portability**: dlopen shim (LoadLibrary on Windows),
+  per-platform library extension (`.so`/`.dylib`/`.dll`), `executableDir`
+  for the three platforms, portable monospace font probe (Consolas/Menlo),
+  portable state/config directories (`LOCALAPPDATA` / `Application Support`;
+  the Linux XDG contracts are unchanged). Built-in `proc` plugin stays
+  POSIX-only and is excluded from the Windows build (documented).
+- **Fix**: the plugin scanner on macOS only accepted `.dylib`, while CMake
+  builds modules as `.so` — no plugin loaded on macOS; both extensions are
+  accepted now.
+- **CI**: matrix of four green jobs (linux make+test, linux cmake,
+  macos arm64, windows msys2/ucrt64), each with a headless golden smoke and
+  a plugin-load assertion; `NODESIM_VERBOSE_PLUGINS=1` prints the loaded
+  plugin list from `--run`.
+- **Release binaries**: new `release.yml` workflow packages `tar.gz`
+  (linux/macos) and a self-contained `zip` (windows, runtime DLLs via
+  `ntldd`) and uploads them to the tag's GitHub Release.
+- **Version surfaces**: `SIMULACRO_VERSION` centralized in
+  `src/core/version.h` (status bar, About dialog and `--version` read the
+  same constant).
+
 ## 0.1.0 — 2026-11-11
 
 First public release. An editor and simulator for node graphs: wxWidgets
