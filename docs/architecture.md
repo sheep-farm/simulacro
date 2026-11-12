@@ -69,7 +69,7 @@ the AUI/panes settle. The auto-refit is therefore IMMEDIATE and bounded:
 
 ## Compliance
 
-- `.nodesim` format 10 is read and written by the core; the smoke suite plus
+- `.sim` format 10 is read and written by the core; the smoke suite plus
   `tests/golden/*.csv` guard the step-by-step behavior.
 - Plugins export the same ABI 14 symbols (`src/sdk/nodesim_plugin.h`); the
   built-in sources live in `plugins/` and compile to `plugins/*.so`.
@@ -136,7 +136,7 @@ Design rules:
   geometry. When a plugin declares in-node widgets (fase 3), the host
   reserves room in the *transient preferred size* (`szW/szH`) so the strip
   and the ports no longer collide; node fit and wire anchors follow the
-  engine box automatically (no `.nodesim` change, no ABI bump).
+  engine box automatically (no `.sim` change, no ABI bump).
 
 - **Layout precedence (fase 3):** the plugin's own `nodesim_plugin_ui()`
   declaration wins; without it the host builds the same kind of strip from
@@ -168,7 +168,7 @@ Design rules:
 
 ## Compatibility (the contracts that replaced the old repo)
 
-- `.nodesim` format 10 is read and written by the core; the smoke suite plus
+- `.sim` format 10 is read and written by the core; the smoke suite plus
   `tests/golden/*.csv` guard the step-by-step behavior.
 - Plugins export the same ABI 14 symbols (`src/sdk/nodesim_plugin.h`); the
   built-in sources live in `plugins/` and compile to `plugins/*.so`.

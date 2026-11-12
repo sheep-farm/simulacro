@@ -27,8 +27,8 @@ if "$BIN" --version | grep -q '^simulacro '; then ok "--version"; else bad "--ve
 if "$BIN" --help | grep -q -- '--run'; then ok "--help"; else bad "--help"; fi
 
 # AR(1) example: 30 steps at 60 Hz -> 31 CSV lines, final t = 0.5
-if [ -f "$EX/ar1.nodesim" ]; then
-    out=$("$BIN" --run "$EX/ar1.nodesim" --steps 30 2>/dev/null)
+if [ -f "$EX/ar1.sim" ]; then
+    out=$("$BIN" --run "$EX/ar1.sim" --steps 30 2>/dev/null)
     lines=$(printf '%s\n' "$out" | wc -l | tr -d ' ')
     if [ "$lines" -eq 31 ]; then ok "ar1 trace has 31 lines"; else
         bad "ar1 trace has $lines lines (expected 31)"
@@ -39,26 +39,26 @@ if [ -f "$EX/ar1.nodesim" ]; then
         bad "ar1 trace header"
     fi
 
-    summary=$("$BIN" --run "$EX/ar1.nodesim" --steps 30 --summary 2>/dev/null)
+    summary=$("$BIN" --run "$EX/ar1.sim" --steps 30 --summary 2>/dev/null)
     if printf '%s\n' "$summary" | grep -q '^t,0\.500000$'; then
         ok "ar1 summary t=0.5"
     else
         bad "ar1 summary t=0.5"
     fi
 else
-    bad "missing example $EX/ar1.nodesim"
+    bad "missing example $EX/ar1.sim"
 fi
 
 # Numeric regression: ar1 at 60 steps must match the golden trace byte for byte
 # (the engine is deterministic; regenerate tests/golden/ only with intent).
 for f in ar1 contador_logico push-level; do
-    if [ -f "tests/golden/$f.csv" ] && [ -f "$EX/$f.nodesim" ]; then
+    if [ -f "tests/golden/$f.csv" ] && [ -f "$EX/$f.sim" ]; then
         # steps por arquivo: push-level cobre a transição do nível (120 = 2s)
         case "$f" in
             push-level) n=120 ;;
             *) n=60 ;;
         esac
-        if "$BIN" --run "$EX/$f.nodesim" --steps $n > .golden.tmp 2>/dev/null
+        if "$BIN" --run "$EX/$f.sim" --steps $n > .golden.tmp 2>/dev/null
         then diff -q tests/golden/$f.csv .golden.tmp >/dev/null 2>&1 && ok "$f golden trace" || bad "$f golden trace"
         else bad "$f golden trace (run failed)"
         fi
@@ -69,8 +69,8 @@ for f in ar1 contador_logico push-level; do
 done
 
 # Map scope loads and renders headlessly (no channels, but must not fail)
-if [ -f "$EX/mapas/mapa-base.nodesim" ]; then
-    if "$BIN" --run "$EX/mapas/mapa-base.nodesim" --steps 1 --summary >/dev/null 2>&1; then
+if [ -f "$EX/mapas/mapa-base.sim" ]; then
+    if "$BIN" --run "$EX/mapas/mapa-base.sim" --steps 1 --summary >/dev/null 2>&1; then
         ok "map example loads"
     else
         bad "map example loads"
@@ -81,7 +81,7 @@ fi
 
 # A few more files from the corpus must load without missing plugins
 # Controles nativos (push/entrada01/saida01) precisam carregar sem plugins faltando
-for f in contador.nodesim logica.nodesim kalman.nodesim controles.nodesim push-level.nodesim; do
+for f in contador.sim logica.sim kalman.sim controles.sim push-level.sim; do
     [ -f "$EX/$f" ] || continue
     err=$("$BIN" --run "$EX/$f" --steps 3 --summary 2>&1 >/dev/null || true)
     if printf '%s' "$err" | grep -qi 'missing plugin\|could not load'; then
@@ -123,6 +123,18 @@ else
     bad "controles family behavior"
 fi
 rm -f .controles_test .controles_test.out
+
+# Compatibilidade: a extensão nova é .sim, mas o loader AINDA abre .nodesim
+# (o cabeçalho do formato segue "nodesim 10" — a extensão é convenção).
+if [ -f tests/compat/nodesim-legacy.nodesim ]; then
+    if "$BIN" --run tests/compat/nodesim-legacy.nodesim --steps 1 --summary >/dev/null 2>&1; then
+        ok "legacy .nodesim still loads"
+    else
+        bad "legacy .nodesim still loads"
+    fi
+else
+    bad "missing tests/compat/nodesim-legacy.nodesim"
+fi
 
 if [ "$fail" -ne 0 ]; then
     echo "some tests failed" >&2

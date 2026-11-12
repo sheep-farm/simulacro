@@ -1,0 +1,6 @@
+nodesim 10
+# botão pushdown: rótulo/cores editáveis + entrada em nível (tick -> push);
+# enquanto a ENTRADA for 1, o botão mostra a face "pressionada" com marcador EXT
+node 0 0 480 -40 0 "t % 2 < 1" "" "" 1 1 0 2 "tick" ""
+node 1 1 800 -40 0 "" "push" "pulsa=0 rotulo=\"START\" face=\"F5B361\" clique=\"C12929\"" 1 1 0 2 "botão" ""
+edge 0 0 1 0

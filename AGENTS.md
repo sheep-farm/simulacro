@@ -19,8 +19,9 @@ ser o avaliador humano dessa etapa.
 
 ## Regras do projeto
 
-- Contratos congelados por testes: formato `.nodesim` (10), ABI 14,
-  `NODESIM_*` envs. Nada de bump de ABI sem decisão explícita.
+- Contratos congelados por testes: formato `nodesim 10` (arquivos **.sim**;
+  o loader ainda lê .nodesim legados), ABI 14, `NODESIM_*` envs. Nada de
+  bump de ABI sem decisão explícita.
 - `make test` verde antes de commit; goldens só se regeneram com intenção
   documentada (ver README, seção *Regression discipline*).
 - Cada camada gateada (`SIMULACRO_NODE_UI`, `SIMULACRO_NODE_WINDOW`) precisa

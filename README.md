@@ -19,8 +19,10 @@ wx panels:
   (TOGGLE) no canvas. Os antigos `entrada01`/`saida01` saíram da biblioteca
   por decisão; voltam como plugins de terceiros pelo **mesmo caminho de
   herança** (`nsui::Control`, docs/abi.md);
-- file format `.nodesim` (format 10) and plugin **ABI 14** unchanged, so
-  existing files and plugins keep working as before;
+- file format `nodesim 10` with the **`.sim` extension** (the format
+  header stays `nodesim 10`; the extension is a UI convention) and plugin
+  **ABI 14** unchanged — existing files keep working, and the loader still
+  opens old **`.nodesim`** files;
 - headless runner (`--run`), port traces and numeric regression through
   `tests/golden/`;
 - **in-canvas parameter widgets (Dear ImGui)**: the selected plugin node
@@ -47,7 +49,7 @@ wx panels:
   (compile-time, default off). See docs/architecture.md for the boundary.
   Built-ins already declaring it: `led` (RGB sliders) and `pgain` (gain
   slider). Details: `docs/abi.md`.
-  `examples/painel-innode.nodesim` (script → pgain → LED) exercises both
+  `examples/painel-innode.sim` (script → pgain → LED) exercises both
   layers when the flag is on;
 - plugin discovery folder `~/.local/share/nodesim/plugins` and the `NODESIM_*`
   environment variables are compatibility surfaces: do not rename them.
@@ -93,7 +95,7 @@ do not include `common.h`.
 
 ```sh
 ./bin/simulacro                          # empty graph
-./bin/simulacro examples/ar1.nodesim
+./bin/simulacro examples/ar1.sim
 ./bin/simulacro --open-scopes FILE       # open every Scope page
 ./bin/simulacro --run FILE --steps 600   # headless CSV trace
 ./bin/simulacro --run FILE --summary     # final values only
@@ -106,7 +108,8 @@ XDG system data directories.
 
 ## Features
 
-- Open, edit and save `.nodesim` files (format 10, ABI 14).
+- Open, edit and save `.sim` files (format `nodesim 10`, ABI 14); old
+  `.nodesim` files open as before.
 - Script nodes with a native multi-line editor, live compile feedback and the
   list of input sources.
 - Plugin nodes: parameters, text fields, ports, custom drawing and state.
@@ -181,13 +184,13 @@ See [docs/architecture.md](docs/architecture.md) for the layering rules.
 ## Regression discipline
 
 The engine is deterministic: run thrice, get the same CSV. The smoke suite
-compares `examples/ar1.nodesim` and `examples/contador_logico.nodesim` traces
+compares `examples/ar1.sim` and `examples/contador_logico.sim` traces
 against `tests/golden/*.csv`. Only regenerate the golden files when a change
 in behavior is intended, and always with a note in the change description:
 
 ```sh
-./bin/simulacro --run examples/ar1.nodesim --steps 60 > tests/golden/ar1.csv
-./bin/simulacro --run examples/contador_logico.nodesim --steps 60 \
+./bin/simulacro --run examples/ar1.sim --steps 60 > tests/golden/ar1.csv
+./bin/simulacro --run examples/contador_logico.sim --steps 60 \
     > tests/golden/contador_logico.csv
 ```
 

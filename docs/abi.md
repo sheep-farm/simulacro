@@ -1,7 +1,7 @@
 # ABI — contract between the host and the plugins
 
 The simulator's plugin ABI lives in `src/sdk/nodesim_plugin.h`. **Today it is
-the ABI 14** (`NODESIM_PLUGIN_API = 14`), frozen: the file format (`.nodesim`
+the ABI 14** (`NODESIM_PLUGIN_API = 14`), frozen: the file format (`.sim`
 10) and the ABI do not move without an explicit decision and a migration note
 in this document.
 
@@ -14,7 +14,7 @@ expected table shape (`api == NODESIM_PLUGIN_API`, `struct_size` documented).
 All tables declare `api`/`struct_size`/counts and are validated on load
 (warnings go to the diagnostics; invalid entries are skipped).
 
-Currently adopted extensions (all additive; no `.nodesim` change):
+Currently adopted extensions (all additive; no `.sim` change):
 
 | Extension symbol | What it declares | Where |
 | --- | --- | --- |
@@ -193,7 +193,7 @@ The base also ships two ready-made controls:
 ## The built-in "controls" library
 
 `plugins/controles.so` — the `push` type only (the pushdown button; face
-inset so the margin stays draggable). `examples/controles.nodesim` ships a
+inset so the margin stays draggable). `examples/controles.sim` ships a
 single button ready to press. The former built-ins `entrada01`/`saida01`
 were removed on purpose (2026-11): the *pattern* stays documented above, so
 third parties recreate them by inheritance exactly as described — we

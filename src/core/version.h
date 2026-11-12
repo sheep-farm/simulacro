@@ -10,7 +10,7 @@
 
 #define NODESIM_VERSION "1.4.0"
 static constexpr int NODESIM_ABI = NODESIM_PLUGIN_API;
-static constexpr int NODESIM_FORMAT = 10; // 1st line of the .nodesim: "nodesim 10"
+static constexpr int NODESIM_FORMAT = 10; // 1st line of the .sim file: "nodesim 10"
 
 inline std::string nodesimVersion() {
     return std::string("nodesim ") + NODESIM_VERSION + " (ABI " + std::to_string(NODESIM_ABI) +

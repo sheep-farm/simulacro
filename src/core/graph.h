@@ -96,7 +96,7 @@ struct Group {
 
 // Event source configured at runtime (plugin or --evento). The host resolves
 // the node and delivers the occurrence through existing wires; the configuration is not
-// written to the .nodesim.
+// written to the .sim file.
 struct EventSource {
     int node = -1;
     int port = 0;

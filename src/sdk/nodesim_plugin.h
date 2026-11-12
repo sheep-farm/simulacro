@@ -292,7 +292,7 @@ struct NsResources {
 // end. This allows stiff equations to be integrated with a smaller internal step without
 // changing the graph step. `substeps` 0 means 1; the accepted range is 1..1024.
 //
-// The policy is PER TYPE and does not change the .nodesim file format. A type
+// The policy is PER TYPE and does not change the .sim file file format. A type
 // without a declaration (or a plugin without the symbol) runs once per step.
 struct NsExec {
     const char* type; // NsNodeType id (must exist in the same .so)

@@ -327,8 +327,11 @@ void MainFrame::buildMenu() {
 }
 
 void MainFrame::buildToolbar(bool labels) {
+    // wxTB_TEXT reserva a linha do rótulo no GTK: no modo compacto o estilo
+    // SAI, e a barra encolhe na altura (o frame re-leia com SendSizeEvent).
     auto* tb = new wxToolBar(this, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-                             wxTB_HORIZONTAL | wxTB_FLAT | wxTB_TEXT);
+                             wxTB_HORIZONTAL | wxTB_FLAT |
+                                 (labels ? wxTB_TEXT : 0));
     tb->SetToolBitmapSize(wxSize(20, 20));
 
     auto icon = [](const wxArtID& id) {
@@ -362,6 +365,12 @@ void MainFrame::buildToolbar(bool labels) {
     add(ID_ADD_SCOPE, "Scope", icon(wxART_REPORT_VIEW), "Add scope node");
     tb->Realize();
     SetToolBar(tb);
+    static const bool dbg = std::getenv("NODESIM_DEBUG_UI") != nullptr;
+    if (dbg) {
+        const wxSize b = tb->GetBestSize(), a = tb->GetSize();
+        std::fprintf(stderr, "[tb] labels=%d best=%dx%d size=%dx%d\n",
+                     (int)labels, b.x, b.y, a.x, a.y);
+    }
 }
 
 void MainFrame::buildLayout() {
@@ -683,12 +692,13 @@ int MainFrame::askSave() {
     if (r == wxCANCEL) return wxCANCEL;
     if (r == wxNO) return wxNO;
     if (engine_.path.empty()) {
-        wxFileDialog dlg(this, T("Save As"), wxEmptyString, "untitled.nodesim",
-                         T("nodesim (*.nodesim)|*.nodesim|All files|*"),
+        wxFileDialog dlg(this, T("Save As"), wxEmptyString, "untitled.sim",
+                         T("simulacro (*.sim)|*.sim|nodesim (*.nodesim)|*.nodesim|All files|*"),
                          wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
         if (dlg.ShowModal() != wxID_OK) return wxCANCEL;
         wxString path = dlg.GetPath();
-        if (!path.Lower().EndsWith(".nodesim")) path += ".nodesim";
+        if (!path.Lower().EndsWith(".sim") && !path.Lower().EndsWith(".nodesim"))
+            path += ".sim";
         if (!engine_.saveAs(path.utf8_string())) {
             wxMessageBox(wxString::FromUTF8(engine_.lastError), T("Save failed"),
                          wxOK | wxICON_ERROR, this);
@@ -711,7 +721,8 @@ void MainFrame::onNew(wxCommandEvent&) {
 void MainFrame::onOpen(wxCommandEvent&) {
     if (askSave() == wxCANCEL) return;
     wxFileDialog dlg(this, T("Open"), wxEmptyString, "",
-                     T("nodesim (*.nodesim)|*.nodesim|All files|*"), wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+                     T("simulacro (*.sim)|*.sim|nodesim (*.nodesim)|*.nodesim|All files|*"),
+                     wxFD_OPEN | wxFD_FILE_MUST_EXIST);
     if (dlg.ShowModal() != wxID_OK) return;
     if (!loadFile(dlg.GetPath().utf8_string()))
         wxMessageBox(wxString::FromUTF8(engine_.lastError), T("Open failed"),
@@ -735,11 +746,12 @@ void MainFrame::onSave(wxCommandEvent&) {
 void MainFrame::onSaveAs(wxCommandEvent&) {
     wxString suggest = baseName(engine_.path);
     wxFileDialog dlg(this, T("Save As"), wxEmptyString, suggest,
-                     T("nodesim (*.nodesim)|*.nodesim|All files|*"),
+                     T("simulacro (*.sim)|*.sim|nodesim (*.nodesim)|*.nodesim|All files|*"),
                      wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
     if (dlg.ShowModal() != wxID_OK) return;
     wxString path = dlg.GetPath();
-    if (!path.Lower().EndsWith(".nodesim")) path += ".nodesim";
+    if (!path.Lower().EndsWith(".sim") && !path.Lower().EndsWith(".nodesim"))
+            path += ".sim";
     if (!engine_.saveAs(path.utf8_string()))
         wxMessageBox(wxString::FromUTF8(engine_.lastError), T("Save failed"),
                      wxOK | wxICON_ERROR, this);
@@ -1124,6 +1136,7 @@ void MainFrame::onToolbarLabels(wxCommandEvent&) {
         SetToolBar(nullptr);
     }
     buildToolbar(tbLabels_);
+    SendSizeEvent(); // o frame re-leia a faixa da barra (altura acompanha)
     updateChecks();
 }
 

@@ -5,7 +5,7 @@
 > (`simulacro [FILE]`) e `--run` headless com `--steps/--rate/--summary/
 > --plugin-dir/--lang`. Recursos do motor que ficaram só na GUI (eventos
 > discretos, convergência de ciclo) estão marcados abaixo como **GUI**.
-> Contratos mantidos: formato `.nodesim` (10), ABI 14, `NODESIM_*` e
+> Contratos mantidos: formato `.sim` (10), ABI 14, `NODESIM_*` e
 > `~/.local/state/nodesim`.
 
 This document gathers common symptoms, the likely cause and the command that
@@ -19,7 +19,7 @@ Run from the repository root:
 ```sh
 make -j8 && make plugins
 ./bin/simulacro --version
-./bin/simulacro --run examples/ar1.nodesim --steps 30 --summary
+./bin/simulacro --run examples/ar1.sim --steps 30 --summary
 make test                      # suite completa (traces golden + kill switches)
 ```
 
@@ -45,13 +45,13 @@ SDL/`libSDL2` error appears.
 - Confirm the dependencies: `ldd bin/simulacro`.
 - Install SDL2, SDL2_ttf and wxWidgets 3.2 (see *Requirements* in the README).
 - On a machine without a display (SSH, CI), use headless mode:
-  `./bin/simulacro --run examples/ar1.nodesim --steps 30`.
+  `./bin/simulacro --run examples/ar1.sim --steps 30`.
 - To test only GUI startup without a display:
   `timeout 3 ./bin/simulacro; echo $?` — code **124** is expected (the
   `timeout` cuts the event loop).
 - If the file passed on the command line does not load, the GUI still opens
   with an empty graph; test the file first headlessly:
-  `./bin/simulacro --run file.nodesim --steps 1 --summary`.
+  `./bin/simulacro --run file.sim --steps 1 --summary`.
 
 ## Status bar warnings
 
@@ -59,7 +59,7 @@ The GUI keeps the previous graph on load failure and shows the outcome in the
 **status bar** (`Loaded examples/…`, node/wire counts, `PAUSED/RUNNING t=…`);
 stderr has the full message. Common cases:
 
-- **load failed**: test the file headlessly and see *The `.nodesim` file
+- **load failed**: test the file headlessly and see *The `.sim` file
   does not open*.
 - **plugin problems**: a node from a missing plugin stays on the canvas but
   does not compute (status bar counts it); rebuild with `make plugins`.
@@ -74,7 +74,7 @@ text version for the command line.
 “file not found” or “GeoJSON without supported geometry”.
 
 - Confirm the path in **Properties → MAP → file**. Relative paths
-  are resolved against the `.nodesim` directory.
+  are resolved against the `.sim` directory.
 - The file must be a `FeatureCollection` with `Polygon`, `MultiPolygon`,
   `LineString`, `MultiLineString`, `Point` or `MultiPoint`.
 - For very large maps, use a simplified version; the parser has limits
@@ -110,7 +110,7 @@ Checklist:
 ```sh
 make plugins                         # builds every plugins/*.so
 ls -l plugins/*.so
-./bin/simulacro --run examples/controles.nodesim --steps 1 --summary
+./bin/simulacro --run examples/controles.sim --steps 1 --summary
 ```
 
 - Run from the repository root; `./plugins` is relative to the execution
@@ -155,7 +155,7 @@ ABI does not match.
   the output at the previous value; errors show in red on the canvas and in
   the `--run` stderr.
 - Trace the values headlessly: add a Scope wired to the node and run
-  `--run file.nodesim --steps 60` — one CSV column per scope channel.
+  `--run file.sim --steps 60` — one CSV column per scope channel.
 
 ## NaN, infinity or clamp
 
@@ -164,7 +164,7 @@ counts the occurrence; values above ±1e9 are clamped and counted. The canvas
 shows a red alert dot on affected nodes and `--run` reports it on stderr.
 
 ```sh
-./bin/simulacro --run file.nodesim --steps 120 > /tmp/x.csv
+./bin/simulacro --run file.sim --steps 120 > /tmp/x.csv
 ```
 
 Investigate:
@@ -214,18 +214,19 @@ example, `a = b + 1`, `b = a/2`), enable *Sim → Converge cycle*:
 ## The result changes between runs
 
 - Use fixed seeds: the plugins' `seed` parameter (e.g. `rng` com
-  `semente=7` em `examples/ar1.nodesim`).
+  `semente=7` em `examples/ar1.sim`).
 - Check the plugins' **discovery order**. An old `.so` under XDG can
   replace the one from `./plugins`; use `--plugin-dir ./plugins` to isolate.
-- The `.nodesim` file is the source of truth; saving in the middle of a run does not
+- The `.sim` file is the source of truth; saving in the middle of a run does not
   freeze the accumulated state, unless you use *Save: current state* in the GUI.
 - The engine is deterministic: `make test` compares golden traces
   (`tests/golden/*.csv`) byte for byte.
 
-## The `.nodesim` file does not open
+## The `.sim` file does not open
 
 - The first line must be `nodesim 10` (older versions 1–9 are converted on
-  load). The file is text; an editor can show the problem. Make a copy before
+  load). The extension is `.sim`; the loader still opens legacy
+  **`.nodesim`** files (same format, different convention). The file is text; an editor can show the problem. Make a copy before
   editing by hand.
 - When saving, the previous file is preserved as `<file>.bak`; if the current file
   is bad, try the `.bak`.
@@ -243,7 +244,7 @@ save often while experimenting with third-party plugins.
 1. Recover the graph from your last save (the file on disk is always the
    last `Ctrl+S`).
 2. Isolate the plugin with `NODESIM_PLUGIN_PATH` or `--plugin-dir` and run a
-   minimal graph headlessly: `./bin/simulacro --run mini.nodesim --steps 2`.
+   minimal graph headlessly: `./bin/simulacro --run mini.sim --steps 2`.
 3. If the crash happens only when creating the node, the problem may be in `create()`;
    if it happens during the step, in `step`/`stepMulti`.
 4. Per-process sandboxing is outside the current scope; remove the plugin until
@@ -257,6 +258,6 @@ analysis, include:
 - output of `./bin/simulacro --version`;
 - the exact command, including flags;
 - the full stderr;
-- the minimal `.nodesim` that reproduces it, or the relevant nodes/parameters;
+- the minimal `.sim` that reproduces it, or the relevant nodes/parameters;
 - build configuration (`EXTRA_CXXFLAGS`, kill switches) if the problem is
   visual or compile-time.

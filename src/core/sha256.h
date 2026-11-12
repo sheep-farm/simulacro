@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 // Minimal SHA-256 (FIPS 180-4), no dependencies — used in the reproducibility
-// manifest (hash of the .nodesim, the trace and the binary).
+// manifest (hash of the .sim file, the trace and the binary).
 #pragma once
 #include <cstddef>
 #include <string>
