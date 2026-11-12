@@ -124,6 +124,26 @@ int runHeadless(const std::string& file, int steps, int rate, const std::string&
 } // namespace
 
 int main(int argc, char** argv) {
+#if defined(__linux__)
+    // Wayland nativo quebra o docking do wxAUI: o protocolo proíbe grab global
+    // do ponteiro e overlays sobre outras janelas, então o painel arrasta e
+    // flutua mas nunca encaixa (funciona no wxMSW/Windows e no X11). Força o
+    // backend X11 do GTK3 (roda via XWayland, invisível ao usuário) ANTES de
+    // qualquer inicialização da wx/GTK. Um GDK_BACKEND explícito do usuário
+    // sempre vence.
+    {
+        const char* session = std::getenv("XDG_SESSION_TYPE");
+        const bool wayland = std::getenv("WAYLAND_DISPLAY") != nullptr ||
+                             (session && std::strcmp(session, "wayland") == 0);
+        if (wayland && std::getenv("GDK_BACKEND") == nullptr) {
+#if defined(_WIN32)
+            _putenv_s("GDK_BACKEND", "x11"); // setenv é POSIX
+#else
+            setenv("GDK_BACKEND", "x11", 1);
+#endif
+        }
+    }
+#endif
     std::string startFile;
     std::string runFile;
     std::string pluginDir;

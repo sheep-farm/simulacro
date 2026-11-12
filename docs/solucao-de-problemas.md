@@ -53,6 +53,20 @@ SDL/`libSDL2` error appears.
   with an empty graph; test the file first headlessly:
   `./bin/simulacro --run file.sim --steps 1 --summary`.
 
+## Panels do not dock (Linux on Wayland)
+
+**Symptoms:** dragging Properties/Nodes/Scopes floats the panel but it
+never docks; the drop hint may not appear. Happens on Wayland compositors
+(Hyprland, GNOME Wayland, Sway…); works on Windows and on X11.
+
+**Cause:** native Wayland forbids what wxAUI's docking relies on — a
+global pointer grab during the drag and an overlay hint drawn over other
+windows. The app forces the GTK3 X11 backend (XWayland) automatically,
+before any GUI initialization, unless you set `GDK_BACKEND` yourself.
+
+- Check what the app is running under: `echo $XDG_SESSION_TYPE`.
+- Manual override (not needed with 0.2.1+): `GDK_BACKEND=x11 ./bin/simulacro`.
+
 ## Status bar warnings
 
 The GUI keeps the previous graph on load failure and shows the outcome in the
