@@ -7,9 +7,9 @@ base and can point to your own maps.
 ## Open
 
 ```sh
-./bin/nodesim examples/mapas/mapa-base.nodesim
-./bin/nodesim examples/mapas/mapa-sobreposto.nodesim
-./bin/nodesim examples/mapas/mapa-interativo.nodesim
+./bin/nodesim examples/mapas/mapa-base.sim
+./bin/nodesim examples/mapas/mapa-sobreposto.sim
+./bin/nodesim examples/mapas/mapa-interativo.sim
 ```
 
 Then open the **Map** node window with a double-click or `O`.
@@ -18,9 +18,9 @@ Then open the **Map** node window with a double-click or `O`.
 
 | file | demonstrates |
 |---|---|
-| `mapa-base.nodesim` | editable base with values per region |
-| `mapa-sobreposto.nodesim` | the same regions with a road layer on top |
-| `mapa-interativo.nodesim` | initial state with selection, painting and annotation |
+| `mapa-base.sim` | editable base with values per region |
+| `mapa-sobreposto.sim` | the same regions with a road layer on top |
+| `mapa-interativo.sim` | initial state with selection, painting and annotation |
 | `rodovias-exemplo.geojson` | three example `LineString`s |
 
 ## Map tools
@@ -40,7 +40,7 @@ Then open the **Map** node window with a double-click or `O`.
 
 ## State
 
-The map state lives in the node `pstate`, inside the `.nodesim` file:
+The map state lives in the node `pstate`, inside the `.sim` file:
 
 - camera;
 - selection;
