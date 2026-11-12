@@ -121,8 +121,8 @@ jobs:
             | while read -r dll; do cp "$dll" .; done
           cp -r ../../examples examples
           cp ../../README.md ../../LICENSE .
-          cd ../..
-          zip -qr "$PKG.zip" "dist/$PKG"
+          cd ../..; cd dist
+          zip -qr "../$PKG.zip" "$PKG"
           echo "PKG=$PKG" >> "$GITHUB_ENV"
       - uses: actions/upload-artifact@v4
         with:
